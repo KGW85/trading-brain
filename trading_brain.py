@@ -353,6 +353,7 @@ for n in nachrichten[:6]:
     news_html += f'<div class="nw"><div class="nwt">{titel}</div><div class="nwm">{n["quelle"]}{tags}</div></div>'
 if not news_html:
     news_html = '<div class="nw"><div class="nwt">Keine Schlagzeilen abrufbar.</div></div>'
+viktor_details = f'<div class="dtitel">Aktuelle Schlagzeilen</div>{news_html}'
 
 # Echtes Depot bewerten (Wert, Gewinn/Verlust in Euro)
 depot_zahlen = None if ONLINE else rechne_depot()   # online: keine Euro-Betraege zeigen
@@ -438,26 +439,37 @@ sina_txt = (f'&bdquo;{len(signale)} Depot-Aenderung(en) heute &ndash; bitte hand
             if signale else '&bdquo;Depot unveraendert &ndash; ich bleibe wachsam.&ldquo;')
 rico_txt = ('&bdquo;Modus Offensiv &ndash; groessere Schwankungen sind eingeplant. Augen auf.&ldquo;'
             if MODUS == "offensiv" else '&bdquo;Risiko im Griff &ndash; Gewichtung ausgewogen.&ldquo;')
+# Claras Detailbereich: die Wertentwicklungs-Kurve (nur lokal, enthaelt Euro)
+clara_details = ""
+if not ONLINE and kurve_html:
+    clara_details = (f'<div class="dtitel">Wertentwicklung</div>{kurve_html}'
+                     f'<div class="dinfo">{kurve_info}</div>')
+
+# Aufbau je Agent: (Symbol, Name, Rolle, Meldung, Status, Statustext, Detailbereich)
 agenten = [
     ("&#128200;", "Theo", "Trend-Waechter &middot; taeglich",
-     f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;', "ready", "Bereit"),
-    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung", sina_txt, "ready", "Bereit"),
-    ("&#128188;", "Doro", "Depot-Verwalterin &middot; laufend", doro_txt, "ready", "Bereit"),
-    ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto", rico_txt, "ready", "Bereit"),
+     f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;', "ready", "Bereit", ""),
+    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung", sina_txt, "ready", "Bereit", ""),
+    ("&#128188;", "Doro", "Depot-Verwalterin &middot; laufend", doro_txt, "ready", "Bereit", ""),
+    ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto", rico_txt, "ready", "Bereit", ""),
     ("&#128301;", "Mira", "Markt-Beobachterin &middot; Fruehwarnung",
-     f'&bdquo;Am naechsten an der Linie: {nah_txt}. Den beobachte ich genau.&ldquo;', "ready", "Bereit"),
+     f'&bdquo;Am naechsten an der Linie: {nah_txt}. Den beobachte ich genau.&ldquo;', "ready", "Bereit", ""),
     ("&#128221;", "Clara", "Chronistin &middot; Journal",
-     f'&bdquo;{tage_gefuehrt} Tag(e) im Journal. Letzter Eintrag: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;', "ready", "Bereit"),
+     f'&bdquo;{tage_gefuehrt} Tag(e) im Journal. Letzter Eintrag: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;',
+     "ready", "Bereit", clara_details),
     ("&#127758;", "Viktor", "Welt-Stratege &middot; Nachrichten",
-     f'&bdquo;{len(nachrichten)} relevante Schlagzeilen gesichtet. Thema heute: {themen_txt}.&ldquo;', "ready", "Bereit"),
-    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern", julian_txt, "ready", "Bereit"),
+     f'&bdquo;{len(nachrichten)} relevante Schlagzeilen gesichtet. Thema heute: {themen_txt}.&ldquo;',
+     "ready", "Bereit", viktor_details),
+    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern", julian_txt, "ready", "Bereit", ""),
 ]
 agent_html = ""
-for ic, nm, role, last, scls, slabel in agenten:
-    agent_html += f'''<div class="card"><div class="row1"><div class="ic">{ic}</div>
+for ic, nm, role, last, scls, slabel, details in agenten:
+    breit = " weit" if details else ""     # Karten mit Details bekommen mehr Platz
+    detail_html = f'<div class="details">{details}</div>' if details else ""
+    agent_html += f'''<div class="card{breit}"><div class="row1"><div class="ic">{ic}</div>
     <span class="status {scls}"><span class="dot"></span>{slabel}</span></div>
     <h3>{nm}</h3><div class="role">{role}</div>
-    <div class="last"><b>Zuletzt:</b> {last}</div></div>'''
+    <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}</div>'''
 
 feed_items = [
     ("Th", jetzt.strftime("%H:%M") + " &middot; Theo",
@@ -518,12 +530,16 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .feed .f:last-child{border-bottom:0}
 .feed .av{width:26px;height:26px;border-radius:7px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--teal)}
 .feed .fmeta{font-size:10px;color:var(--dim);margin-bottom:2px}.feed .ftxt{font-size:12px}
-.news{margin-bottom:32px}
-.nw{padding:9px 0;border-bottom:1px solid var(--line)}
-.nw:last-child{border-bottom:0}
+.card.weit{grid-column:span 2}
+.details{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.dtitel{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-bottom:7px;font-weight:600}
+.dinfo{font-size:10.5px;color:var(--dim);margin-top:4px}
+.nw{padding:8px 0;border-bottom:1px solid var(--line)}
+.nw:last-child{border-bottom:0;padding-bottom:0}
 .nwt{font-size:12.5px;line-height:1.45}
 .nwm{font-size:10px;color:var(--dim);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .tag{background:rgba(75,182,201,.14);color:var(--teal);padding:1px 6px;border-radius:20px;font-weight:600;letter-spacing:.3px}
+@media(max-width:600px){.card.weit{grid-column:span 1}}
 footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 @media(max-width:820px){.sysgrid{grid-template-columns:1fr}}
 """
@@ -546,16 +562,9 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<div class='eyebrow'>// Systeme &amp; Team-Funk</div>"
         "<div class='sysgrid'>"
         f"<div class='tile'><h4>&#128682; Markt-Ampel</h4><div class='amp'>{ampel}</div></div>"
-        f"<div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>{tun}</div>"
-        + (f"<div style='margin-top:14px;padding-top:12px;border-top:1px solid var(--line)'>"
-           f"<div style='font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-bottom:6px'>"
-           f"Wertentwicklung</div>{kurve_html}"
-           f"<div style='font-size:10.5px;color:var(--dim);margin-top:4px'>{kurve_info}</div></div>"
-           if not ONLINE else "") + "</div>"
+        f"<div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>{tun}</div></div>"
         f"<div class='tile'><h4>&#128251; Team-Funk</h4><div class='feed'>{feed_html}</div></div>"
         "</div>"
-        "<div class='eyebrow' style='margin-top:32px'>// Viktors Weltlage</div>"
-        f"<div class='tile news'>{news_html}</div>"
         "<footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer>"
         "</body></html>")
 
