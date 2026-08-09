@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Trading Brain</title><style>
+:root{--bg:#0d141d;--panel:#141d28;--panel2:#18232f;--line:#243342;--ink:#e7edf3;--muted:#8395a7;--dim:#5c6b7d;--green:#3ecf8e;--greenbg:rgba(62,207,142,.12);--red:#e5645a;--teal:#4bb6c9;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;padding:26px 34px 60px;max-width:1180px;margin:0 auto}
+.accent{font-family:Georgia,serif;font-style:italic;color:var(--green)}
+h1{font-size:26px;font-weight:600;margin-bottom:4px}
+.sub{color:var(--dim);font-size:12px;margin-bottom:24px}
+.brain{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:28px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.brain .orb{width:46px;height:46px;border-radius:12px;background:var(--greenbg);display:flex;align-items:center;justify-content:center;font-size:22px}
+.brain h2{font-size:17px;font-weight:600}
+.brain .bs{color:var(--dim);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.brain p{color:var(--muted);font-size:13px;margin-top:10px;max-width:520px}
+.stats{margin-left:auto;display:flex;gap:26px;text-align:center}
+.stats .n{font-size:26px;font-weight:600}.stats .l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-top:2px}
+.eyebrow{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);margin:0 0 14px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;margin-bottom:32px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card .row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card .ic{width:34px;height:34px;border-radius:9px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:17px}
+.status{font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:5px;background:var(--greenbg);color:var(--green)}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.status.soon{background:rgba(131,149,167,.14);color:var(--muted)}.status.soon .dot{background:var(--muted)}
+.card h3{font-size:15px;font-weight:600}
+.card .role{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--teal);margin:3px 0 10px}
+.card .last{margin-top:6px;padding-top:11px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim)}
+.card .last b{color:var(--muted)}
+.sysgrid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:14px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.tile h4{font-size:13px;font-weight:600;margin-bottom:6px}
+.amp{display:flex;gap:12px;margin-top:10px}
+.amp .m{flex:1;text-align:center;background:var(--panel2);border-radius:10px;padding:10px 4px}
+.amp .m .dot{width:11px;height:11px;border-radius:50%;margin:0 auto 6px}
+.amp .m .nm{font-size:12px;font-weight:600}.amp .m .st{font-size:10px;color:var(--dim);margin-top:2px}
+.g .dot{background:var(--green);box-shadow:0 0 10px rgba(62,207,142,.5)}
+.r .dot{background:var(--red);box-shadow:0 0 10px rgba(229,100,90,.5)}
+.amp .m.held{box-shadow:inset 0 0 0 1px var(--green)}
+.tile .todo{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.7}
+.feed .f{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
+.feed .f:last-child{border-bottom:0}
+.feed .av{width:26px;height:26px;border-radius:7px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--teal)}
+.feed .fmeta{font-size:10px;color:var(--dim);margin-bottom:2px}.feed .ftxt{font-size:12px}
+.news{margin-bottom:32px}
+.nw{padding:9px 0;border-bottom:1px solid var(--line)}
+.nw:last-child{border-bottom:0}
+.nwt{font-size:12.5px;line-height:1.45}
+.nwm{font-size:10px;color:var(--dim);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{background:rgba(75,182,201,.14);color:var(--teal);padding:1px 6px;border-radius:20px;font-weight:600;letter-spacing:.3px}
+footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
+@media(max-width:820px){.sysgrid{grid-template-columns:1fr}}
+</style></head><body><h1>Guten Morgen, <span class='accent'>Kilian</span>.</h1><div class='sub'>Trading Brain &middot; Lagecheck vom 09.08.2026 09:30</div><div class='brain'><div class='orb'>&#9670;</div><div><h2>Trading Brain</h2><div class='bs'>Modell 2.0 &middot; Momentum-Ranking &middot; Modus Offensiv</div><p>Rankt taeglich deine Maerkte nach Staerke und haelt die besten im Aufwaertstrend. Meldet, sobald sich dein Depot aendern soll.</p></div><div class='stats'><div><div class='n' style='color:var(--green)'>2/5</div><div class='l'>im Depot</div></div><div><div class='n'>0</div><div class='l'>Signale heute</div></div><div><div class='n'>2</div><div class='l'>Plaetze</div></div></div></div><div class='eyebrow'>// Dein Team</div><div class='grid'><div class="card"><div class="row1"><div class="ic">&#128200;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Theo</h3><div class="role">Trend-Waechter &middot; taeglich</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;2 von 5 Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#128276;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Sina</h3><div class="role">Signalgeberin &middot; bei Depot-Aenderung</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Depot unveraendert &ndash; ich bleibe wachsam.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#128188;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Doro</h3><div class="role">Depot-Verwalterin &middot; laufend</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Modus Offensiv: 2 Wert(e) im Depot. Betraege bleiben privat.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#128737;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Rico</h3><div class="role">Risiko-Waechter &middot; Veto</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Modus Offensiv &ndash; groessere Schwankungen sind eingeplant. Augen auf.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#128301;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Mira</h3><div class="role">Markt-Beobachterin &middot; Fruehwarnung</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Am naechsten an der Linie: Gold (-1.8%). Den beobachte ich genau.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#128221;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Clara</h3><div class="role">Chronistin &middot; automatisch</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Alles protokolliert. Letzter Lauf: 09.08. 09:30.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#127758;</div>
+    <span class="status ready"><span class="dot"></span>Bereit</span></div>
+    <h3>Viktor</h3><div class="role">Welt-Stratege &middot; Nachrichten</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;17 relevante Schlagzeilen gesichtet. Thema heute: Tech, Geopolitik, DAX, Zinsen.&ldquo;</div></div><div class="card"><div class="row1"><div class="ic">&#9878;</div>
+    <span class="status soon"><span class="dot"></span>In Vorbereitung</span></div>
+    <h3>Dr. Julian Winter</h3><div class="role">Jurist &middot; Recht &amp; Steuern</div>
+    <div class="last"><b>Zuletzt:</b> &bdquo;Ich uebernehme kuenftig Steuern und Rechtsfragen. Noch im Aufbau.&ldquo;</div></div></div><div class='eyebrow'>// Systeme &amp; Team-Funk</div><div class='sysgrid'><div class='tile'><h4>&#128682; Markt-Ampel</h4><div class='amp'><div class="m g held"><div class="dot"></div><div class="nm">S&P Tech &#9733;</div><div class="st">+18.0% ueber</div></div><div class="m r"><div class="dot"></div><div class="nm">Gold</div><div class="st">-1.8% unter</div></div><div class="m g held"><div class="dot"></div><div class="nm">DAX &#9733;</div><div class="st">+7.7% ueber</div></div><div class="m r"><div class="dot"></div><div class="nm">Bitcoin</div><div class="st">-7.0% unter</div></div><div class="m r"><div class="dot"></div><div class="nm">Ethereum</div><div class="st">-5.8% unter</div></div></div></div><div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>Nichts zu tun. Depot unveraendert lassen.</div></div><div class='tile'><h4>&#128251; Team-Funk</h4><div class='feed'><div class="f"><div class="av">Th</div><div><div class="fmeta">09:30 &middot; Theo</div><div class="ftxt">Modus Offensiv. 2 von 5 Maerkten im Aufwaertstrend - ich ranke nach Staerke.</div></div></div><div class="f"><div class="av">Si</div><div><div class="fmeta">09:30 &middot; Sina</div><div class="ftxt">Depot unveraendert - heute nichts zu tun.</div></div></div><div class="f"><div class="av">Do</div><div><div class="fmeta">09:30 &middot; Doro</div><div class="ftxt">Depot: DAX, S&P Tech.</div></div></div><div class="f"><div class="av">Vi</div><div><div class="fmeta">09:30 &middot; Viktor</div><div class="ftxt">Weltlage gesichtet: 17 relevante Meldungen. Schwerpunkt: Tech, Geopolitik, DAX, Zinsen.</div></div></div><div class="f"><div class="av">Mi</div><div><div class="fmeta">09:30 &middot; Mira</div><div class="ftxt">Am naechsten an der Linie: Gold (-1.8%). Den beobachte ich.</div></div></div></div></div></div><div class='eyebrow' style='margin-top:32px'>// Viktors Weltlage</div><div class='tile news'><div class="nw"><div class="nwt">OpenAI pausiert teils Entwicklung von KI-Modell wegen Sicherheitsbedenken</div><div class="nwm">Tagesschau<span class="tag">Tech</span></div></div><div class="nw"><div class="nwt">Iran-Krieg: Ein bulgarisches Dorf gegen US-Flugzeuge</div><div class="nwm">Welt<span class="tag">Geopolitik</span></div></div><div class="nw"><div class="nwt">DAX und DJI mit neuen Höchstständen</div><div class="nwm">Maerkte<span class="tag">DAX</span></div></div><div class="nw"><div class="nwt">DAX: Erstmals über 26.000 Punkte am 3. August</div><div class="nwm">Maerkte<span class="tag">DAX</span></div></div><div class="nw"><div class="nwt">Dax klettert auf neues Hoch bei 26.445 Zählern - Börsen-Zeitung</div><div class="nwm">Maerkte<span class="tag">DAX</span></div></div><div class="nw"><div class="nwt">Dividendenranking DAX: Porsche SE führt vor Münchener Rück und Allianz - boerse-express.com</div><div class="nwm">Maerkte<span class="tag">DAX</span></div></div></div><footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer></body></html>
