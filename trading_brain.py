@@ -653,8 +653,8 @@ for ic, nm, role, last, scls, slabel, details in agenten:
     stimme, tempo, hoehe = STIMMEN.get(kurz, ("", 1.0, 1.0))
     agent_html += f'''<div class="card{breit}"><div class="row1"><div class="ic">{ic}</div>
     <span class="status {scls}"><span class="dot"></span>{slabel}</span></div>
-    <h3>{nm}<button class="vor" title="Vorlesen lassen"
-      onclick="sprich(this,'{gesprochen}','{stimme}',{tempo},{hoehe})">&#128266;</button></h3><div class="role">{role}</div>
+    <h3>{nm}<button class="vor" title="Vorlesen lassen" data-agent="{kurz}"
+      onclick="sprich(this,'{gesprochen}','{stimme}',{tempo},{hoehe},'{kurz}')">&#128266;</button></h3><div class="role">{role}</div>
     <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}{notiz_html}</div>'''
 
 feed_items = [
@@ -683,7 +683,8 @@ body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSys
 h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .sub{color:var(--dim);font-size:12px;margin-bottom:24px}
 .brain{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:28px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
-.brain .orb{width:46px;height:46px;border-radius:12px;background:var(--greenbg);display:flex;align-items:center;justify-content:center;font-size:22px}
+.brain .orb{width:52px;height:52px;border-radius:13px;background:var(--greenbg);display:flex;align-items:center;justify-content:center;color:var(--green);font-size:22px;flex-shrink:0;overflow:hidden}
+.brain .orb img,.brain .orb svg{width:34px;height:34px;object-fit:contain}
 .brain h2{font-size:17px;font-weight:600}
 .brain .bs{color:var(--dim);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;margin-top:2px}
 .brain p{color:var(--muted);font-size:13px;margin-top:10px;max-width:520px}
@@ -812,7 +813,7 @@ function frageAgent(wer,text){
      var antwort=(d && d.antwort) ? d.antwort : 'Ich konnte gerade nicht antworten.';
      merke(wer,antwort,'agent');
      var s=STIMMEN[wer]||['',1,1];
-     sprich(null,wer+' sagt: '+antwort,s[0],s[1],s[2]);
+     sprich(null,antwort,s[0],s[1],s[2],wer);
    })
    .catch(function(){
      warte.remove();
@@ -829,14 +830,37 @@ function findeStimme(wunsch){
   return de[0]||null;
 }
 function stoppAlles(){
-  window.speechSynthesis.cancel();
-  document.querySelectorAll('.aktiv').forEach(function(b){b.classList.remove('aktiv')});
+  if('speechSynthesis' in window)window.speechSynthesis.cancel();
+  if(LAUFENDES_AUDIO){try{LAUFENDES_AUDIO.pause()}catch(e){} LAUFENDES_AUDIO=null}
+  document.querySelectorAll('.vor.aktiv,.briefbtn.aktiv').forEach(function(b){b.classList.remove('aktiv')});
 }
-function sprich(knopf,text,stimme,tempo,hoehe){
-  if(!('speechSynthesis' in window))return;
+/* Echte Stimme vom Agenten-Server holen (OpenAI). Klappt das nicht,
+   nimmt sprichMac() die eingebaute Mac-Stimme. */
+var LAUFENDES_AUDIO=null;
+function sprich(knopf,text,stimme,tempo,hoehe,wer){
   var lief=knopf && knopf.classList.contains('aktiv');
   stoppAlles();
-  if(lief)return;                        /* nochmal klicken = stoppen */
+  if(lief)return;
+  if(knopf)knopf.classList.add('aktiv');
+  var name=wer||(knopf?knopf.getAttribute('data-agent'):null);
+  if(name && location.protocol.indexOf('http')===0){
+    fetch('/stimme',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({agent:name,text:text})})
+     .then(function(r){ if(r.status!==200)throw 0; return r.blob() })
+     .then(function(b){
+       var audio=new Audio(URL.createObjectURL(b));
+       LAUFENDES_AUDIO=audio;
+       if(knopf){audio.onended=function(){knopf.classList.remove('aktiv')};
+                 audio.onerror=function(){knopf.classList.remove('aktiv')}}
+       audio.play();
+     })
+     .catch(function(){ sprichMac(knopf,text,stimme,tempo,hoehe) });
+    return;
+  }
+  sprichMac(knopf,text,stimme,tempo,hoehe);
+}
+function sprichMac(knopf,text,stimme,tempo,hoehe){
+  if(!('speechSynthesis' in window)){if(knopf)knopf.classList.remove('aktiv');return}
   var a=new SpeechSynthesisUtterance(text);
   a.lang='de-DE'; a.rate=tempo||1; a.pitch=hoehe||1;
   var st=findeStimme(stimme); if(st)a.voice=st;
@@ -854,24 +878,33 @@ function briefing(knopf){
   knopf.classList.add('aktiv');
   var teile=[];
   document.querySelectorAll('.card h3 .vor').forEach(function(b){
-    var m=b.getAttribute('onclick').match(/sprich\\(this,'([^']*)','([^']*)',([\\d.]+),([\\d.]+)\\)/);
-    if(m)teile.push({text:m[1],stimme:m[2],tempo:parseFloat(m[3]),hoehe:parseFloat(m[4])});
+    var m=b.getAttribute('onclick').match(/sprich\\(this,'([^']*)','([^']*)',([\\d.]+),([\\d.]+),'([^']*)'\\)/);
+    if(m)teile.push({text:m[1],stimme:m[2],tempo:parseFloat(m[3]),hoehe:parseFloat(m[4]),wer:m[5]});
   });
   var i=0;
   function weiter(){
     if(i>=teile.length||!knopf.classList.contains('aktiv')){knopf.classList.remove('aktiv');return}
     var t=teile[i++];
+    /* Echte Stimme versuchen, sonst Mac-Stimme */
+    if(location.protocol.indexOf('http')===0){
+      fetch('/stimme',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({agent:t.wer,text:t.text})})
+       .then(function(r){ if(r.status!==200)throw 0; return r.blob() })
+       .then(function(b){
+         var audio=new Audio(URL.createObjectURL(b));
+         LAUFENDES_AUDIO=audio; audio.onended=weiter; audio.onerror=weiter; audio.play();
+       })
+       .catch(function(){ macStueck(t) });
+    } else { macStueck(t) }
+  }
+  function macStueck(t){
     var a=new SpeechSynthesisUtterance(t.text);
     a.lang='de-DE'; a.rate=t.tempo; a.pitch=t.hoehe;
     var st=findeStimme(t.stimme); if(st)a.voice=st;
     a.onend=weiter; a.onerror=weiter;
     window.speechSynthesis.speak(a);
   }
-  var gruss=new SpeechSynthesisUtterance('Hallo Kilian, hier ist dein Lagebericht.');
-  gruss.lang='de-DE'; gruss.rate=1;
-  var gs=findeStimme('Shelley'); if(gs)gruss.voice=gs;
-  gruss.onend=weiter; gruss.onerror=weiter;
-  window.speechSynthesis.speak(gruss);
+  weiter();
 }
 if('speechSynthesis' in window){window.speechSynthesis.onvoiceschanged=function(){}}
 
@@ -895,12 +928,30 @@ function diktat(knopf,wer){
 }
 </script>"""
 
+# Dein Logo - als Vektorgrafik, damit es in jeder Groesse scharf bleibt.
+# Dein Logo: liegt es als Datei neben diesem Programm, wird es eingebettet.
+# Sonst erscheint das schlichte Rauten-Zeichen.
+def lies_logo():
+    for name in ("logo.png", "logo.jpg", "logo.jpeg", "logo.svg"):
+        pfad = os.path.join(HIER, name)
+        if os.path.exists(pfad):
+            if name.endswith(".svg"):
+                return open(pfad, encoding="utf-8").read()
+            import base64, mimetypes
+            typ = mimetypes.guess_type(pfad)[0] or "image/png"
+            b64 = base64.b64encode(open(pfad, "rb").read()).decode("ascii")
+            return f"<img src='data:{typ};base64,{b64}' alt='Logo'>"
+    return "&#9670;"
+
+
+LOGO = lies_logo()
+
 html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>Trading Brain</title><style>" + CSS + "</style></head><body>"
         f"<h1>{gruss}, <span class='accent'>Kilian</span>.</h1>"
         f"<div class='sub'>Trading Brain &middot; Lagecheck vom {jetzt.strftime('%d.%m.%Y %H:%M')}</div>"
-        "<div class='brain'><div class='orb'>&#9670;</div><div>"
+        "<div class='brain'><div class='orb'>" + LOGO + "</div><div>"
         f"<h2>Trading Brain</h2><div class='bs'>Modell 2.0 &middot; Momentum-Ranking &middot; Modus {modus_label}</div>"
         "<p>Rankt taeglich deine Maerkte nach Staerke und haelt die besten im Aufwaertstrend. Meldet, sobald sich dein Depot aendern soll.</p></div>"
         "<div class='stats'>"
