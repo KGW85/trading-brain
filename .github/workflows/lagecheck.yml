@@ -1,62 +1,35 @@
-name: Trading Brain Lagecheck
+name: Trading Brain veroeffentlichen
 
 on:
-  schedule:
-    - cron: "55 6 * * 1-5"
-    - cron: "15 20 * * 1-5"
   push:
-    paths:
-      - "trading_brain.py"
-      - ".github/workflows/lagecheck.yml"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  lagecheck:
+  veroeffentlichen:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - run: pip install requests
-
-      - name: Lagecheck ausfuehren
-        env:
-          TRADING_BRAIN_ONLINE: "1"
-          NTFY_KANAL: ${{ secrets.NTFY_KANAL }}
-        run: python trading_brain.py
-
-      - name: Ergebnis speichern
-        run: |
-          git config user.name "Trading Brain"
-          git config user.email "actions@github.com"
-          git add dashboard.html brain_status.json
-          git diff --staged --quiet || git commit -m "Lagecheck"
-          git push
 
       - name: Seite vorbereiten
         run: |
           mkdir -p _site
           cp dashboard.html _site/index.html
+          [ -f logo.png ] && cp logo.png _site/ || true
+          [ -d stimmen ] && cp -r stimmen _site/ || true
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
-  veroeffentlichen:
-    needs: lagecheck
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
+      - name: Auf GitHub Pages veroeffentlichen
+        id: deployment
         uses: actions/deploy-pages@v4
