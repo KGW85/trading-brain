@@ -58,6 +58,83 @@ NTFY_KANAL = _lies_kanal()
 NTFY_AN = bool(NTFY_KANAL)
 
 
+# ======================================================================
+#   KI-ANBINDUNG - die Agenten formulieren ihre Meldungen selbst
+# ======================================================================
+# Ohne Schluessel laeuft alles wie bisher weiter (feste Texte).
+def _lies_ki_schluessel():
+    aus_umgebung = os.environ.get("ANTHROPIC_API_KEY")
+    if aus_umgebung:
+        return aus_umgebung.strip()
+    pfad = os.path.join(HIER, "brain_geheim.json")
+    if os.path.exists(pfad):
+        try:
+            return json.load(open(pfad, encoding="utf-8")).get("anthropic_api_key", "")
+        except Exception:
+            return ""
+    return ""
+
+
+KI_SCHLUESSEL = _lies_ki_schluessel()
+KI_AN = bool(KI_SCHLUESSEL)
+KI_MODELL = "claude-opus-5"
+
+# Wer ist wer? Diese Beschreibungen geben den Agenten ihren Charakter.
+TEAM_CHARAKTER = """Du schreibst die Meldungen fuer Kilians Trading-Team. Jeder
+Agent hat einen eigenen Charakter und spricht in der Ich-Form, auf Deutsch:
+
+- Theo (Trend-Waechter): ruhig, sachlich, beobachtet Trends. Nennt Zahlen.
+- Sina (Signalgeberin): wach, direkt, meldet Handlungsbedarf. Bei Signalen dringlich.
+- Doro (Depot-Verwalterin): freundlich, gelassen, spricht ueber Geld und Bestand.
+- Rico (Risiko-Waechter): vorsichtig, warnend, mahnt zur Umsicht. Etwas knapp.
+- Mira (Markt-Beobachterin): neugierig, vorausschauend, sieht was sich anbahnt.
+- Clara (Chronistin): bedaechtig, ordnend, spricht ueber Aufzeichnungen.
+- Viktor (Welt-Stratege): nachrichtensprecher-artig, ordnet Weltlage ein.
+- Winter (Dr. Julian Winter, Jurist): seriös, praezise, Steuern und Recht.
+
+Regeln:
+- Ein bis zwei Saetze pro Agent. Natuerlich gesprochen, nicht steif.
+- Immer in der Ich-Form, mit Bezug auf die konkreten Zahlen der Lage.
+- Keine Anlageberatung, keine Kursprognosen, kein "du solltest kaufen".
+- Kein Markdown, keine Anfuehrungszeichen, keine Emojis."""
+
+AGENTEN_SCHEMA = {
+    "type": "object",
+    "properties": {name: {"type": "string"} for name in
+                   ["Theo", "Sina", "Doro", "Rico", "Mira", "Clara", "Viktor", "Winter"]},
+    "required": ["Theo", "Sina", "Doro", "Rico", "Mira", "Clara", "Viktor", "Winter"],
+    "additionalProperties": False,
+}
+
+
+def frage_ki(lage_text):
+    """Laesst die Agenten ihre Meldungen selbst formulieren.
+    Gibt ein dict {Name: Satz} zurueck - oder None, wenn etwas schiefgeht."""
+    if not KI_AN:
+        return None
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=KI_SCHLUESSEL)
+        antwort = client.messages.create(
+            model=KI_MODELL,
+            max_tokens=1500,
+            system=TEAM_CHARAKTER,
+            output_config={"effort": "low", "format": {
+                "type": "json_schema", "schema": AGENTEN_SCHEMA}},
+            messages=[{"role": "user", "content":
+                       f"Die heutige Lage:\n\n{lage_text}\n\n"
+                       f"Schreibe fuer jeden Agenten seine Meldung."}],
+        )
+        text = next(b.text for b in antwort.content if b.type == "text")
+        saetze = json.loads(text)
+        kosten = (antwort.usage.input_tokens * 5 + antwort.usage.output_tokens * 25) / 1_000_000
+        print(f"  KI: Agenten haben selbst formuliert (~{kosten:.3f} USD)")
+        return saetze
+    except Exception as fehler:
+        print("  KI nicht erreichbar, nutze feste Texte:", str(fehler)[:90])
+        return None
+
+
 def sende_push(titel, text, dringend=False):
     """Schickt eine Benachrichtigung an dein iPhone (ntfy). Fehler stoeren nie den Rest."""
     if not NTFY_AN:
@@ -488,6 +565,35 @@ if not ONLINE and kurve_html:
 # Aufbau je Agent: (Symbol, Name, Rolle, Meldung, Status, Statustext, Detailbereich)
 sina_details = f'<div class="dtitel">Heute zu tun</div><div class="todo">{tun}</div>'
 
+# ---- Die Agenten formulieren ihre Meldungen selbst (falls KI angebunden) ----
+lage_fuer_ki = [f"Modus: {modus_label} (haelt die {anzahl} staerksten im Aufwaertstrend)"]
+for e in ok:
+    lage_fuer_ki.append(
+        f"- {e['markt']}: Kurs {e['kurs']}, {'ueber' if e['ueber'] else 'unter'} der "
+        f"200-Tage-Linie ({e['abstand']:+.1f}%), Momentum {e['momentum']:+.1f}%"
+        f"{', IM DEPOT' if e['gehalten'] else ''}")
+lage_fuer_ki.append("Signale heute: " + ("; ".join(signale) if signale else "keine, Depot unveraendert"))
+if depot_zahlen:
+    lage_fuer_ki.append(f"Depotwert {d_wert} Euro, Gewinn/Verlust {d_gewinn:+d} Euro ({d_pct:+.1f}%)")
+    _steuer, _frei = schaetze_steuer(d_gewinn)
+    lage_fuer_ki.append(f"Steuer bei Verkauf heute: {_steuer:.0f} Euro, Freibetrag-Rest {_frei:.0f} Euro")
+lage_fuer_ki.append(f"Journal: {tage_gefuehrt} Tag(e) aufgezeichnet")
+lage_fuer_ki.append(f"Naechster an der Linie: {nah_txt}")
+if nachrichten:
+    lage_fuer_ki.append("Schlagzeilen: " + " | ".join(n["titel"] for n in nachrichten[:4]))
+    if betroffen_depot:
+        lage_fuer_ki.append("Davon betrifft dein Depot: " + ", ".join(sorted(betroffen_depot)))
+
+ki_saetze = frage_ki("\n".join(lage_fuer_ki))
+
+
+def meldung(name, standard):
+    """Nimmt den KI-Satz, wenn vorhanden - sonst den festen Text."""
+    if ki_saetze and ki_saetze.get(name):
+        return "&bdquo;" + html_mod.escape(ki_saetze[name].strip()) + "&ldquo;"
+    return standard
+
+
 # Jeder Agent bekommt eine eigene Stimme + Sprechweise (Tempo, Tonhoehe).
 # Faellt eine Stimme aus, greift die naechste in der Liste.
 STIMMEN = {
@@ -503,20 +609,25 @@ STIMMEN = {
 
 agenten = [
     ("&#128200;", "Theo", "Trend-Waechter &middot; taeglich",
-     f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;',
+     meldung("Theo", f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;'),
      "ready", "Bereit", f'<div class="dtitel">Markt-Ampel</div><div class="amp">{ampel}</div>{theo_details}'),
-    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung", sina_txt, "ready", "Bereit", sina_details),
-    ("&#128188;", "Doro", "Depot-Verwalterin &middot; laufend", doro_txt, "ready", "Bereit", ""),
-    ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto", rico_txt, "ready", "Bereit", ""),
+    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung",
+     meldung("Sina", sina_txt), "ready", "Bereit", sina_details),
+    ("&#128188;", "Doro", "Depot-Verwalterin &middot; laufend",
+     meldung("Doro", doro_txt), "ready", "Bereit", ""),
+    ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto",
+     meldung("Rico", rico_txt), "ready", "Bereit", ""),
     ("&#128301;", "Mira", "Markt-Beobachterin &middot; Fruehwarnung",
-     f'&bdquo;Am naechsten an der Linie: {nah_txt}. Den beobachte ich genau.&ldquo;', "ready", "Bereit", ""),
+     meldung("Mira", f'&bdquo;Am naechsten an der Linie: {nah_txt}. Den beobachte ich genau.&ldquo;'),
+     "ready", "Bereit", ""),
     ("&#128221;", "Clara", "Chronistin &middot; Journal",
-     f'&bdquo;{tage_gefuehrt} Tag(e) im Journal. Letzter Eintrag: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;',
+     meldung("Clara", f'&bdquo;{tage_gefuehrt} Tag(e) im Journal. Letzter Eintrag: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;'),
      "ready", "Bereit", clara_details),
     ("&#127758;", "Viktor", "Welt-Stratege &middot; Nachrichten",
-     f'&bdquo;{len(nachrichten)} relevante Schlagzeilen gesichtet. Thema heute: {themen_txt}.&ldquo;',
+     meldung("Viktor", f'&bdquo;{len(nachrichten)} relevante Schlagzeilen gesichtet. Thema heute: {themen_txt}.&ldquo;'),
      "ready", "Bereit", viktor_details),
-    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern", julian_txt, "ready", "Bereit", ""),
+    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern",
+     meldung("Winter", julian_txt), "ready", "Bereit", ""),
 ]
 agent_html = ""
 for ic, nm, role, last, scls, slabel, details in agenten:
