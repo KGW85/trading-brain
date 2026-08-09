@@ -745,6 +745,9 @@ padding:6px 14px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:poi
 .nlist{margin-bottom:7px}
 .nmsg{font-size:11.5px;color:var(--muted);background:var(--panel2);border-radius:8px;padding:6px 9px;margin-bottom:5px;display:flex;gap:8px;align-items:flex-start}
 .nmsg time{color:var(--dim);font-size:9.5px;white-space:nowrap;margin-left:auto}
+.nmsg.agent{background:var(--greenbg);color:var(--ink);border-left:2px solid var(--green)}
+.nmsg.denkt{opacity:.65;font-style:italic}
+.nlist{max-height:230px;overflow-y:auto}
 .nrow{display:flex;gap:6px}
 .nin{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--ink);
 padding:7px 10px;font-size:11.5px;font-family:inherit;min-width:0}
@@ -765,24 +768,56 @@ footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 
 # Notizen bleiben im Browser gespeichert (auch nach dem naechsten Lauf).
 NOTIZ_SKRIPT = """<script>
+var STIMMEN=__STIMMEN__;
 function notizen(){try{return JSON.parse(localStorage.getItem('tb_notizen')||'{}')}catch(e){return {}}}
 function zeige(wer){
   var box=document.getElementById('nl-'+wer); if(!box)return;
-  var alle=(notizen()[wer]||[]).slice(-4);
+  var alle=(notizen()[wer]||[]).slice(-6);
   box.innerHTML=alle.map(function(n){
-    return '<div class="nmsg"><span>'+n.text.replace(/[<>&]/g,'')+'</span><time>'+n.zeit+'</time></div>';
+    var k=(n.von==='agent')?'nmsg agent':'nmsg';
+    return '<div class="'+k+'"><span>'+n.text.replace(/[<>&]/g,'')+'</span><time>'+n.zeit+'</time></div>';
   }).join('');
+  box.scrollTop=box.scrollHeight;
+}
+function merke(wer,text,von){
+  var alle=notizen(); alle[wer]=alle[wer]||[];
+  var d=new Date();
+  alle[wer].push({text:text, von:von||'ich',
+    zeit:('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'. '
+    +('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)});
+  alle[wer]=alle[wer].slice(-20);
+  localStorage.setItem('tb_notizen',JSON.stringify(alle));
+  zeige(wer);
 }
 function notiz(wer){
   var feld=document.getElementById('ni-'+wer); if(!feld)return;
   var text=feld.value.trim(); if(!text)return;
-  var alle=notizen(); alle[wer]=alle[wer]||[];
-  var d=new Date();
-  alle[wer].push({text:text, zeit:('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'. '
-    +('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)});
-  alle[wer]=alle[wer].slice(-20);
-  localStorage.setItem('tb_notizen',JSON.stringify(alle));
-  feld.value=''; zeige(wer);
+  merke(wer,text,'ich');
+  feld.value='';
+  frageAgent(wer,text);
+}
+/* --- Dialog: die Frage an den Agenten-Server auf deinem Mac schicken --- */
+function frageAgent(wer,text){
+  var box=document.getElementById('nl-'+wer); if(!box)return;
+  var warte=document.createElement('div');
+  warte.className='nmsg agent denkt';
+  warte.innerHTML='<span>'+wer+' denkt nach ...</span>';
+  box.appendChild(warte);
+  fetch('http://localhost:8765',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({agent:wer,frage:text})})
+   .then(function(r){return r.json()})
+   .then(function(d){
+     warte.remove();
+     var antwort=(d && d.antwort) ? d.antwort : 'Ich konnte gerade nicht antworten.';
+     merke(wer,antwort,'agent');
+     var s=STIMMEN[wer]||['',1,1];
+     sprich(null,wer+' sagt: '+antwort,s[0],s[1],s[2]);
+   })
+   .catch(function(){
+     warte.remove();
+     merke(wer,'Ich bin gerade nicht erreichbar - starte den Agenten-Server auf deinem Mac (python3 agenten_server.py), dann antworte ich dir.','agent');
+   });
 }
 document.querySelectorAll('.nlist').forEach(function(b){zeige(b.id.slice(3))});
 
@@ -879,7 +914,7 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<div class='eyebrow'>// Team-Funk</div>"
         f"<div class='tile'><div class='feed'>{feed_html}</div></div>"
         "<footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer>"
-        + NOTIZ_SKRIPT +
+        + NOTIZ_SKRIPT.replace("__STIMMEN__", json.dumps(STIMMEN)) +
         "</body></html>")
 
 with open(DASHBOARD_DATEI, "w", encoding="utf-8") as d:
