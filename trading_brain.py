@@ -196,15 +196,30 @@ def hole_nachrichten(max_pro_quelle=8):
     return gesammelt
 
 
+# Welches Thema betrifft welchen deiner Maerkte?
+THEMA_TRIFFT = {
+    "Zinsen":     ["S&P Tech", "Gold", "Bitcoin", "Ethereum"],
+    "Politik":    ["DAX"],
+    "Geopolitik": ["Gold", "DAX"],
+    "Krypto":     ["Bitcoin", "Ethereum"],
+    "Tech":       ["S&P Tech"],
+    "DAX":        ["DAX"],
+}
+
+
 def bewerte_nachrichten(nachrichten):
-    """Ordnet jeder Schlagzeile Themen zu. Relevante zuerst."""
+    """Ordnet jeder Schlagzeile Themen zu und merkt an, welche Maerkte betroffen sind."""
     for n in nachrichten:
         klein = n["titel"].lower()
         n["themen"] = sorted({th for th, woerter in THEMEN.items()
                               if any(w in klein for w in woerter)})
+        betroffen = set()
+        for th in n["themen"]:
+            betroffen.update(m for m in THEMA_TRIFFT.get(th, []) if m in MAERKTE)
+        n["betrifft"] = sorted(betroffen)
     relevant = [n for n in nachrichten if n["themen"]]
-    # Nach Anzahl Treffer sortieren (mehr Themen = wahrscheinlich wichtiger)
-    relevant.sort(key=lambda n: len(n["themen"]), reverse=True)
+    # Zuerst, was deine gehaltenen Werte betrifft; dann nach Anzahl Treffer.
+    relevant.sort(key=lambda n: (len(n["betrifft"]), len(n["themen"])), reverse=True)
     return relevant
 
 
@@ -349,11 +364,20 @@ print(f"  Viktor: {len(nachrichten)} relevante Schlagzeilen ({themen_txt})")
 news_html = ""
 for n in nachrichten[:6]:
     tags = "".join(f'<span class="tag">{t}</span>' for t in n["themen"][:2])
+    # Betrifft die Meldung etwas, das du haeltst? Dann hervorheben.
+    marken = ""
+    for m in n["betrifft"]:
+        klasse = "trifft depot" if m in gehalten_namen else "trifft"
+        marken += f'<span class="{klasse}">{m}</span>'
     titel = html_mod.escape(n["titel"])[:120]
-    news_html += f'<div class="nw"><div class="nwt">{titel}</div><div class="nwm">{n["quelle"]}{tags}</div></div>'
+    news_html += (f'<div class="nw"><div class="nwt">{titel}</div>'
+                  f'<div class="nwm">{n["quelle"]}{tags}{marken}</div></div>')
 if not news_html:
     news_html = '<div class="nw"><div class="nwt">Keine Schlagzeilen abrufbar.</div></div>'
-viktor_details = f'<div class="dtitel">Aktuelle Schlagzeilen</div>{news_html}'
+betroffen_depot = {m for n in nachrichten[:6] for m in n["betrifft"] if m in gehalten_namen}
+hinweis = (f'<div class="dinfo">Betrifft dein Depot: {", ".join(sorted(betroffen_depot))}</div>'
+           if betroffen_depot else "")
+viktor_details = f'<div class="dtitel">Aktuelle Schlagzeilen</div>{news_html}{hinweis}'
 
 # Echtes Depot bewerten (Wert, Gewinn/Verlust in Euro)
 depot_zahlen = None if ONLINE else rechne_depot()   # online: keine Euro-Betraege zeigen
@@ -372,6 +396,22 @@ else:
         doro_txt = f'&bdquo;Modus {modus_label}: ich halte {len(gehalten_liste)} Wert(e), je ~{betrag} &euro;.&ldquo;'
         wert_block = f"<div><div class='n'>{kapital_txt}&euro;</div><div class='l'>Kapital</div></div>"
     gv_block = ""
+
+# Theos Detailbereich: Rangliste nach Staerke - wer waere als naechstes dran?
+rang = sorted(ok, key=lambda e: e["momentum"], reverse=True)
+theo_details = '<div class="dtitel">Rangliste nach Staerke</div>'
+for platz, e in enumerate(rang, 1):
+    if e["gehalten"]:
+        lage, lfarbe = "im Depot", "var(--green)"
+    elif e["ueber"]:
+        lage, lfarbe = "im Trend, wartet", "var(--teal)"
+    else:
+        lage, lfarbe = f"unter der Linie ({e['abstand']:+.1f}%)", "var(--dim)"
+    theo_details += (
+        f'<div class="rang"><span class="rnr">{platz}</span>'
+        f'<span class="rnm">{e["markt"]}</span>'
+        f'<span class="rmom">{e["momentum"]:+.1f}%</span>'
+        f'<span class="rlage" style="color:{lfarbe}">{lage}</span></div>')
 
 # Clara: diesen Lauf ins Journal schreiben (Grundlage fuer die Kurve)
 journal = lies_journal()
@@ -446,10 +486,13 @@ if not ONLINE and kurve_html:
                      f'<div class="dinfo">{kurve_info}</div>')
 
 # Aufbau je Agent: (Symbol, Name, Rolle, Meldung, Status, Statustext, Detailbereich)
+sina_details = f'<div class="dtitel">Heute zu tun</div><div class="todo">{tun}</div>'
+
 agenten = [
     ("&#128200;", "Theo", "Trend-Waechter &middot; taeglich",
-     f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;', "ready", "Bereit", ""),
-    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung", sina_txt, "ready", "Bereit", ""),
+     f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;',
+     "ready", "Bereit", f'<div class="dtitel">Markt-Ampel</div><div class="amp">{ampel}</div>{theo_details}'),
+    ("&#128276;", "Sina", "Signalgeberin &middot; bei Depot-Aenderung", sina_txt, "ready", "Bereit", sina_details),
     ("&#128188;", "Doro", "Depot-Verwalterin &middot; laufend", doro_txt, "ready", "Bereit", ""),
     ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto", rico_txt, "ready", "Bereit", ""),
     ("&#128301;", "Mira", "Markt-Beobachterin &middot; Fruehwarnung",
@@ -466,10 +509,17 @@ agent_html = ""
 for ic, nm, role, last, scls, slabel, details in agenten:
     breit = " weit" if details else ""     # Karten mit Details bekommen mehr Platz
     detail_html = f'<div class="details">{details}</div>' if details else ""
+    kurz = nm.split()[-1] if nm.startswith("Dr.") else nm     # "Winter" statt "Dr. Julian Winter"
+    # Notizfeld: du kannst jedem Agenten etwas hinterlassen (wird im Browser gemerkt)
+    notiz_html = (f'<div class="notiz"><div class="nlist" id="nl-{kurz}"></div>'
+                  f'<div class="nrow"><input class="nin" id="ni-{kurz}" '
+                  f'placeholder="Nachricht an {kurz} ..." '
+                  f'onkeydown="if(event.key===\'Enter\')notiz(\'{kurz}\')">'
+                  f'<button class="nbtn" onclick="notiz(\'{kurz}\')">Senden</button></div></div>')
     agent_html += f'''<div class="card{breit}"><div class="row1"><div class="ic">{ic}</div>
     <span class="status {scls}"><span class="dot"></span>{slabel}</span></div>
     <h3>{nm}</h3><div class="role">{role}</div>
-    <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}</div>'''
+    <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}{notiz_html}</div>'''
 
 feed_items = [
     ("Th", jetzt.strftime("%H:%M") + " &middot; Theo",
@@ -539,10 +589,54 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .nwt{font-size:12.5px;line-height:1.45}
 .nwm{font-size:10px;color:var(--dim);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .tag{background:rgba(75,182,201,.14);color:var(--teal);padding:1px 6px;border-radius:20px;font-weight:600;letter-spacing:.3px}
+.trifft{background:rgba(131,149,167,.16);color:var(--muted);padding:1px 6px;border-radius:20px;font-weight:600}
+.trifft.depot{background:var(--greenbg);color:var(--green)}
+.rang{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px}
+.rang:last-child{border-bottom:0}
+.rnr{width:16px;color:var(--dim);font-size:10.5px}
+.rnm{font-weight:600;min-width:74px}
+.rmom{color:var(--muted);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.rlage{font-size:10.5px;margin-left:auto}
+.notiz{margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.nlist{margin-bottom:7px}
+.nmsg{font-size:11.5px;color:var(--muted);background:var(--panel2);border-radius:8px;padding:6px 9px;margin-bottom:5px;display:flex;gap:8px;align-items:flex-start}
+.nmsg time{color:var(--dim);font-size:9.5px;white-space:nowrap;margin-left:auto}
+.nrow{display:flex;gap:6px}
+.nin{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--ink);
+padding:7px 10px;font-size:11.5px;font-family:inherit;min-width:0}
+.nin::placeholder{color:var(--dim)}
+.nin:focus{outline:none;border-color:var(--teal)}
+.nbtn{background:var(--greenbg);color:var(--green);border:0;border-radius:8px;padding:7px 12px;
+font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.nbtn:hover{background:rgba(62,207,142,.2)}
 @media(max-width:600px){.card.weit{grid-column:span 1}}
 footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 @media(max-width:820px){.sysgrid{grid-template-columns:1fr}}
 """
+
+# Notizen bleiben im Browser gespeichert (auch nach dem naechsten Lauf).
+NOTIZ_SKRIPT = """<script>
+function notizen(){try{return JSON.parse(localStorage.getItem('tb_notizen')||'{}')}catch(e){return {}}}
+function zeige(wer){
+  var box=document.getElementById('nl-'+wer); if(!box)return;
+  var alle=(notizen()[wer]||[]).slice(-4);
+  box.innerHTML=alle.map(function(n){
+    return '<div class="nmsg"><span>'+n.text.replace(/[<>&]/g,'')+'</span><time>'+n.zeit+'</time></div>';
+  }).join('');
+}
+function notiz(wer){
+  var feld=document.getElementById('ni-'+wer); if(!feld)return;
+  var text=feld.value.trim(); if(!text)return;
+  var alle=notizen(); alle[wer]=alle[wer]||[];
+  var d=new Date();
+  alle[wer].push({text:text, zeit:('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'. '
+    +('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)});
+  alle[wer]=alle[wer].slice(-20);
+  localStorage.setItem('tb_notizen',JSON.stringify(alle));
+  feld.value=''; zeige(wer);
+}
+document.querySelectorAll('.nlist').forEach(function(b){zeige(b.id.slice(3))});
+</script>"""
 
 html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -559,13 +653,10 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "</div></div>"
         "<div class='eyebrow'>// Dein Team</div>"
         f"<div class='grid'>{agent_html}</div>"
-        "<div class='eyebrow'>// Systeme &amp; Team-Funk</div>"
-        "<div class='sysgrid'>"
-        f"<div class='tile'><h4>&#128682; Markt-Ampel</h4><div class='amp'>{ampel}</div></div>"
-        f"<div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>{tun}</div></div>"
-        f"<div class='tile'><h4>&#128251; Team-Funk</h4><div class='feed'>{feed_html}</div></div>"
-        "</div>"
+        "<div class='eyebrow'>// Team-Funk</div>"
+        f"<div class='tile'><div class='feed'>{feed_html}</div></div>"
         "<footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer>"
+        + NOTIZ_SKRIPT +
         "</body></html>")
 
 with open(DASHBOARD_DATEI, "w", encoding="utf-8") as d:
