@@ -1,0 +1,58 @@
+name: Trading Brain Lagecheck
+
+on:
+  schedule:
+    - cron: "55 6 * * 1-5"
+    - cron: "15 20 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lagecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - name: Lagecheck ausfuehren
+        env:
+          TRADING_BRAIN_ONLINE: "1"
+          NTFY_KANAL: ${{ secrets.NTFY_KANAL }}
+        run: python trading_brain.py
+
+      - name: Ergebnis speichern
+        run: |
+          git config user.name "Trading Brain"
+          git config user.email "actions@github.com"
+          git add dashboard.html brain_status.json
+          git diff --staged --quiet || git commit -m "Lagecheck"
+          git push
+
+      - name: Seite vorbereiten
+        run: |
+          mkdir -p _site
+          cp dashboard.html _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  veroeffentlichen:
+    needs: lagecheck
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
