@@ -516,9 +516,14 @@ for ic, nm, role, last, scls, slabel, details in agenten:
                   f'placeholder="Nachricht an {kurz} ..." '
                   f'onkeydown="if(event.key===\'Enter\')notiz(\'{kurz}\')">'
                   f'<button class="nbtn" onclick="notiz(\'{kurz}\')">Senden</button></div></div>')
+    # Text zum Vorlesen: Anfuehrungszeichen und HTML-Reste entfernen
+    gesprochen = re.sub(r"<[^>]+>", "", last)
+    gesprochen = html_mod.unescape(gesprochen).replace("„", "").replace("“", "").replace("–", "-")
+    gesprochen = f"{nm} meldet: {gesprochen}".replace("'", "")
     agent_html += f'''<div class="card{breit}"><div class="row1"><div class="ic">{ic}</div>
     <span class="status {scls}"><span class="dot"></span>{slabel}</span></div>
-    <h3>{nm}</h3><div class="role">{role}</div>
+    <h3>{nm}<button class="vor" title="Vorlesen lassen"
+      onclick="sprich(this,'{gesprochen}')">&#128266;</button></h3><div class="role">{role}</div>
     <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}{notiz_html}</div>'''
 
 feed_items = [
@@ -561,8 +566,16 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .status{font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:5px;background:var(--greenbg);color:var(--green)}
 .status .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .status.soon{background:rgba(131,149,167,.14);color:var(--muted)}.status.soon .dot{background:var(--muted)}
-.card h3{font-size:15px;font-weight:600}
-.card .role{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--teal);margin:3px 0 10px}
+.card h3{font-size:22px;font-weight:700;letter-spacing:-.2px;display:flex;align-items:center;gap:8px}
+.card .role{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--teal);margin:4px 0 11px}
+.vor{background:none;border:0;color:var(--dim);cursor:pointer;font-size:15px;padding:2px 4px;line-height:1;border-radius:6px}
+.vor:hover{color:var(--teal);background:var(--panel2)}
+.vor.aktiv{color:var(--green)}
+.teamzeile{display:flex;align-items:center;gap:14px;margin:0 0 14px;flex-wrap:wrap}
+.briefbtn{margin-left:auto;background:var(--greenbg);color:var(--green);border:0;border-radius:20px;
+padding:6px 14px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.briefbtn:hover{background:rgba(62,207,142,.2)}
+.briefbtn.aktiv{background:var(--green);color:var(--bg)}
 .card .last{margin-top:6px;padding-top:11px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim)}
 .card .last b{color:var(--muted)}
 .sysgrid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:14px}
@@ -636,6 +649,36 @@ function notiz(wer){
   feld.value=''; zeige(wer);
 }
 document.querySelectorAll('.nlist').forEach(function(b){zeige(b.id.slice(3))});
+
+/* --- Sprachausgabe: die Agenten lesen dir ihre Meldung vor --- */
+function deutscheStimme(){
+  var s=window.speechSynthesis.getVoices();
+  return s.find(function(v){return v.lang.indexOf('de')===0 && /Anna|Petra|Markus|Yannick|Google/.test(v.name)})
+      || s.find(function(v){return v.lang.indexOf('de')===0}) || null;
+}
+function sprich(knopf,text){
+  if(!('speechSynthesis' in window))return;
+  var aktiv=knopf && knopf.classList.contains('aktiv');
+  window.speechSynthesis.cancel();
+  document.querySelectorAll('.vor.aktiv').forEach(function(b){b.classList.remove('aktiv')});
+  if(aktiv)return;                       /* nochmal klicken = stoppen */
+  var a=new SpeechSynthesisUtterance(text);
+  a.lang='de-DE'; a.rate=1.02; a.pitch=1;
+  var st=deutscheStimme(); if(st)a.voice=st;
+  if(knopf){knopf.classList.add('aktiv');
+    a.onend=function(){knopf.classList.remove('aktiv')};
+    a.onerror=function(){knopf.classList.remove('aktiv')};}
+  window.speechSynthesis.speak(a);
+}
+function briefing(knopf){
+  var teile=[];
+  document.querySelectorAll('.card h3 .vor').forEach(function(b){
+    var m=b.getAttribute('onclick').match(/sprich\\(this,'(.*)'\\)/);
+    if(m)teile.push(m[1]);
+  });
+  sprich(knopf, 'Guten Tag Kilian. Hier ist dein Lagebericht. ' + teile.join('. '));
+}
+if('speechSynthesis' in window){window.speechSynthesis.onvoiceschanged=function(){}}
 </script>"""
 
 html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
@@ -651,7 +694,8 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         f"<div><div class='n'>{len(signale)}</div><div class='l'>Signale heute</div></div>"
         f"{wert_block}{gv_block}"
         "</div></div>"
-        "<div class='eyebrow'>// Dein Team</div>"
+        "<div class='teamzeile'><div class='eyebrow' style='margin:0'>// Dein Team</div>"
+        "<button class='briefbtn' onclick='briefing(this)'>&#128266; Lagebericht anhoeren</button></div>"
         f"<div class='grid'>{agent_html}</div>"
         "<div class='eyebrow'>// Team-Funk</div>"
         f"<div class='tile'><div class='feed'>{feed_html}</div></div>"
