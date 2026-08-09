@@ -488,6 +488,19 @@ if not ONLINE and kurve_html:
 # Aufbau je Agent: (Symbol, Name, Rolle, Meldung, Status, Statustext, Detailbereich)
 sina_details = f'<div class="dtitel">Heute zu tun</div><div class="todo">{tun}</div>'
 
+# Jeder Agent bekommt eine eigene Stimme + Sprechweise (Tempo, Tonhoehe).
+# Faellt eine Stimme aus, greift die naechste in der Liste.
+STIMMEN = {
+    "Theo":    ("Reed",    0.98, 0.95),   # ruhig, sachlich
+    "Sina":    ("Sandy",   1.10, 1.10),   # wach, aufmerksam
+    "Doro":    ("Shelley", 1.00, 1.02),   # freundlich, gelassen
+    "Rico":    ("Rocko",   0.92, 0.85),   # tief, warnend
+    "Mira":    ("Flo",     1.05, 1.08),   # neugierig
+    "Clara":   ("Grandma", 0.95, 1.00),   # bedaechtig, erzaehlend
+    "Viktor":  ("Eddy",    1.02, 0.92),   # nachrichtensprecher-artig
+    "Winter":  ("Grandpa", 0.90, 0.88),   # aelter, seriös - der Jurist
+}
+
 agenten = [
     ("&#128200;", "Theo", "Trend-Waechter &middot; taeglich",
      f'&bdquo;{len(ueber_liste)} von {len(ok)} Maerkten im Aufwaertstrend. Ich ranke sie nach Staerke.&ldquo;',
@@ -512,18 +525,25 @@ for ic, nm, role, last, scls, slabel, details in agenten:
     kurz = nm.split()[-1] if nm.startswith("Dr.") else nm     # "Winter" statt "Dr. Julian Winter"
     # Notizfeld: du kannst jedem Agenten etwas hinterlassen (wird im Browser gemerkt)
     notiz_html = (f'<div class="notiz"><div class="nlist" id="nl-{kurz}"></div>'
-                  f'<div class="nrow"><input class="nin" id="ni-{kurz}" '
-                  f'placeholder="Nachricht an {kurz} ..." '
+                  f'<div class="nrow">'
+                  f'<button class="mic" title="Nachricht einsprechen" '
+                  f'onclick="diktat(this,\'{kurz}\')">&#127908;</button>'
+                  f'<input class="nin" id="ni-{kurz}" '
+                  f'placeholder="Sprich oder tippe an {kurz} ..." '
                   f'onkeydown="if(event.key===\'Enter\')notiz(\'{kurz}\')">'
                   f'<button class="nbtn" onclick="notiz(\'{kurz}\')">Senden</button></div></div>')
-    # Text zum Vorlesen: Anfuehrungszeichen und HTML-Reste entfernen
+    # Text zum Vorlesen aufbereiten - klingt so natuerlicher
     gesprochen = re.sub(r"<[^>]+>", "", last)
-    gesprochen = html_mod.unescape(gesprochen).replace("„", "").replace("“", "").replace("–", "-")
-    gesprochen = f"{nm} meldet: {gesprochen}".replace("'", "")
+    gesprochen = html_mod.unescape(gesprochen)
+    for weg, hin in [("„", ""), ("“", ""), ("–", ","), ("&", " und "), ("%", " Prozent"),
+                     ("€", " Euro"), ("ue", "ü"), ("ae", "ä"), ("oe", "ö")]:
+        gesprochen = gesprochen.replace(weg, hin)
+    gesprochen = re.sub(r"\s+", " ", gesprochen).replace("'", "").strip()
+    stimme, tempo, hoehe = STIMMEN.get(kurz, ("", 1.0, 1.0))
     agent_html += f'''<div class="card{breit}"><div class="row1"><div class="ic">{ic}</div>
     <span class="status {scls}"><span class="dot"></span>{slabel}</span></div>
     <h3>{nm}<button class="vor" title="Vorlesen lassen"
-      onclick="sprich(this,'{gesprochen}')">&#128266;</button></h3><div class="role">{role}</div>
+      onclick="sprich(this,'{gesprochen}','{stimme}',{tempo},{hoehe})">&#128266;</button></h3><div class="role">{role}</div>
     <div class="last"><b>Zuletzt:</b> {last}</div>{detail_html}{notiz_html}</div>'''
 
 feed_items = [
@@ -622,6 +642,11 @@ padding:7px 10px;font-size:11.5px;font-family:inherit;min-width:0}
 .nbtn{background:var(--greenbg);color:var(--green);border:0;border-radius:8px;padding:7px 12px;
 font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
 .nbtn:hover{background:rgba(62,207,142,.2)}
+.mic{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--muted);
+padding:6px 10px;font-size:14px;cursor:pointer;line-height:1;flex-shrink:0}
+.mic:hover{border-color:var(--teal);color:var(--teal)}
+.mic.aktiv{background:var(--red);border-color:var(--red);color:#fff;animation:puls 1.1s ease-in-out infinite}
+@keyframes puls{0%,100%{opacity:1}50%{opacity:.55}}
 @media(max-width:600px){.card.weit{grid-column:span 1}}
 footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 @media(max-width:820px){.sysgrid{grid-template-columns:1fr}}
@@ -650,35 +675,78 @@ function notiz(wer){
 }
 document.querySelectorAll('.nlist').forEach(function(b){zeige(b.id.slice(3))});
 
-/* --- Sprachausgabe: die Agenten lesen dir ihre Meldung vor --- */
-function deutscheStimme(){
+/* --- Sprachausgabe: jeder Agent hat seine eigene Stimme --- */
+function findeStimme(wunsch){
   var s=window.speechSynthesis.getVoices();
-  return s.find(function(v){return v.lang.indexOf('de')===0 && /Anna|Petra|Markus|Yannick|Google/.test(v.name)})
-      || s.find(function(v){return v.lang.indexOf('de')===0}) || null;
+  var de=s.filter(function(v){return v.lang.indexOf('de')===0});
+  if(wunsch){var t=de.find(function(v){return v.name.indexOf(wunsch)===0}); if(t)return t;}
+  return de[0]||null;
 }
-function sprich(knopf,text){
-  if(!('speechSynthesis' in window))return;
-  var aktiv=knopf && knopf.classList.contains('aktiv');
+function stoppAlles(){
   window.speechSynthesis.cancel();
-  document.querySelectorAll('.vor.aktiv').forEach(function(b){b.classList.remove('aktiv')});
-  if(aktiv)return;                       /* nochmal klicken = stoppen */
+  document.querySelectorAll('.aktiv').forEach(function(b){b.classList.remove('aktiv')});
+}
+function sprich(knopf,text,stimme,tempo,hoehe){
+  if(!('speechSynthesis' in window))return;
+  var lief=knopf && knopf.classList.contains('aktiv');
+  stoppAlles();
+  if(lief)return;                        /* nochmal klicken = stoppen */
   var a=new SpeechSynthesisUtterance(text);
-  a.lang='de-DE'; a.rate=1.02; a.pitch=1;
-  var st=deutscheStimme(); if(st)a.voice=st;
+  a.lang='de-DE'; a.rate=tempo||1; a.pitch=hoehe||1;
+  var st=findeStimme(stimme); if(st)a.voice=st;
   if(knopf){knopf.classList.add('aktiv');
     a.onend=function(){knopf.classList.remove('aktiv')};
     a.onerror=function(){knopf.classList.remove('aktiv')};}
   window.speechSynthesis.speak(a);
 }
+/* Lagebericht: jeder Agent spricht nacheinander mit SEINER Stimme */
 function briefing(knopf){
+  if(!('speechSynthesis' in window))return;
+  var lief=knopf.classList.contains('aktiv');
+  stoppAlles();
+  if(lief)return;
+  knopf.classList.add('aktiv');
   var teile=[];
   document.querySelectorAll('.card h3 .vor').forEach(function(b){
-    var m=b.getAttribute('onclick').match(/sprich\\(this,'(.*)'\\)/);
-    if(m)teile.push(m[1]);
+    var m=b.getAttribute('onclick').match(/sprich\\(this,'([^']*)','([^']*)',([\\d.]+),([\\d.]+)\\)/);
+    if(m)teile.push({text:m[1],stimme:m[2],tempo:parseFloat(m[3]),hoehe:parseFloat(m[4])});
   });
-  sprich(knopf, 'Guten Tag Kilian. Hier ist dein Lagebericht. ' + teile.join('. '));
+  var i=0;
+  function weiter(){
+    if(i>=teile.length||!knopf.classList.contains('aktiv')){knopf.classList.remove('aktiv');return}
+    var t=teile[i++];
+    var a=new SpeechSynthesisUtterance(t.text);
+    a.lang='de-DE'; a.rate=t.tempo; a.pitch=t.hoehe;
+    var st=findeStimme(t.stimme); if(st)a.voice=st;
+    a.onend=weiter; a.onerror=weiter;
+    window.speechSynthesis.speak(a);
+  }
+  var gruss=new SpeechSynthesisUtterance('Hallo Kilian, hier ist dein Lagebericht.');
+  gruss.lang='de-DE'; gruss.rate=1;
+  var gs=findeStimme('Shelley'); if(gs)gruss.voice=gs;
+  gruss.onend=weiter; gruss.onerror=weiter;
+  window.speechSynthesis.speak(gruss);
 }
 if('speechSynthesis' in window){window.speechSynthesis.onvoiceschanged=function(){}}
+
+/* --- Spracheingabe: Nachricht einsprechen statt tippen --- */
+var Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
+function diktat(knopf,wer){
+  if(!Erkennung){alert('Spracheingabe braucht Safari oder Chrome.');return}
+  var feld=document.getElementById('ni-'+wer); if(!feld)return;
+  if(knopf.classList.contains('aktiv')){if(knopf._r)knopf._r.stop();return}
+  var r=new Erkennung();
+  r.lang='de-DE'; r.interimResults=true; r.continuous=false;
+  knopf.classList.add('aktiv'); knopf._r=r;
+  r.onresult=function(e){
+    var t='';
+    for(var i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    feld.value=t;
+  };
+  r.onend=function(){knopf.classList.remove('aktiv'); if(feld.value.trim())notiz(wer)};
+  r.onerror=function(){knopf.classList.remove('aktiv')};
+  r.start();
+}
 </script>"""
 
 html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
