@@ -4,10 +4,11 @@ on:
   schedule:
     - cron: "55 6 * * 1-5"
     - cron: "15 20 * * 1-5"
-    push:
+  push:
     paths:
       - "trading_brain.py"
-      - ".github/workflows/lagecheck.yml"workflow_dispatch:
+      - ".github/workflows/lagecheck.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
