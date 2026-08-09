@@ -79,6 +79,56 @@ KI_SCHLUESSEL = _lies_ki_schluessel()
 KI_AN = bool(KI_SCHLUESSEL)
 KI_MODELL = "claude-opus-5"
 
+# ---- Stimmen vorproduzieren (damit auch die Online-Version echt klingt) ----
+def _lies_stimm_schluessel():
+    if os.environ.get("OPENAI_API_KEY"):
+        return os.environ["OPENAI_API_KEY"].strip()
+    pfad = os.path.join(HIER, "brain_geheim.json")
+    if os.path.exists(pfad):
+        try:
+            return json.load(open(pfad, encoding="utf-8")).get("openai_api_key", "")
+        except Exception:
+            return ""
+    return ""
+
+
+STIMM_SCHLUESSEL = _lies_stimm_schluessel()
+STIMMEN_ORDNER = os.path.join(HIER, "stimmen")
+
+# Stimme + Tempo + Regieanweisung je Agent (gleich wie im Agenten-Server)
+OPENAI_STIMMEN = {
+    "Theo":   ("echo",    1.06, "Sprich ruhig und sachlich, aber zuegig - wie ein erfahrener Analyst."),
+    "Sina":   ("nova",    1.10, "Sprich wach, klar und aufmerksam - du meldest Wichtiges."),
+    "Doro":   ("shimmer", 1.02, "Sprich freundlich, warm und gelassen, wie eine hilfsbereite Kollegin."),
+    "Rico":   ("onyx",    0.98, "Sprich tief und ernst, mit ruhigem Nachdruck - du warnst."),
+    "Mira":   ("coral",   1.12, "Sprich lebhaft, hell und neugierig - als haettest du etwas entdeckt."),
+    "Clara":  ("ballad",  0.92, "Sprich langsam, weich und erzaehlend, mit ruhigen Pausen."),
+    "Viktor": ("fable",   1.08, "Sprich klar, flott und sachlich wie ein Nachrichtensprecher."),
+    "Winter": ("ash",     1.0,  "Sprich seriös, praezise und wuerdevoll, wie ein erfahrener Jurist."),
+}
+
+
+def erzeuge_stimmdatei(agent, text):
+    """Laesst OpenAI den Satz sprechen und legt ihn als MP3 ab."""
+    if not STIMM_SCHLUESSEL or agent not in OPENAI_STIMMEN:
+        return False
+    stimme, tempo, anweisung = OPENAI_STIMMEN[agent]
+    try:
+        a = requests.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers={"Authorization": f"Bearer {STIMM_SCHLUESSEL}"},
+            json={"model": "gpt-4o-mini-tts", "voice": stimme, "input": text[:4000],
+                  "instructions": anweisung + " Sprich auf Deutsch, natuerlich und nicht abgelesen.",
+                  "speed": tempo, "response_format": "mp3"}, timeout=60)
+        if a.status_code != 200:
+            return False
+        os.makedirs(STIMMEN_ORDNER, exist_ok=True)
+        with open(os.path.join(STIMMEN_ORDNER, f"{agent}.mp3"), "wb") as d:
+            d.write(a.content)
+        return True
+    except Exception:
+        return False
+
 # Wer ist wer? Diese Beschreibungen geben den Agenten ihren Charakter.
 TEAM_CHARAKTER = """Du schreibst die Meldungen fuer Kilians Trading-Team. Jeder
 Agent hat einen eigenen Charakter und spricht in der Ich-Form, auf Deutsch:
@@ -594,6 +644,19 @@ def meldung(name, standard):
     return standard
 
 
+# Stimmen als Dateien vorproduzieren, damit sie ueberall klingen -
+# auch online, wo der Agenten-Server nicht erreichbar ist.
+stimmen_da = set()
+if STIMM_SCHLUESSEL:
+    for _name in OPENAI_STIMMEN:
+        _text = (ki_saetze or {}).get(_name, "")
+        if _text and erzeuge_stimmdatei(_name, _text.strip()):
+            stimmen_da.add(_name)
+    if stimmen_da:
+        print(f"  Stimmen vorproduziert: {len(stimmen_da)} Agenten "
+              f"(~{len(stimmen_da) * 0.005:.2f} USD)")
+
+
 # Jeder Agent bekommt eine eigene Stimme + Sprechweise (Tempo, Tonhoehe).
 # Faellt eine Stimme aus, greift die naechste in der Liste.
 STIMMEN = {
@@ -770,6 +833,7 @@ footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 # Notizen bleiben im Browser gespeichert (auch nach dem naechsten Lauf).
 NOTIZ_SKRIPT = """<script>
 var STIMMEN=__STIMMEN__;
+var VORPRODUZIERT=__VORPRODUZIERT__;
 function notizen(){try{return JSON.parse(localStorage.getItem('tb_notizen')||'{}')}catch(e){return {}}}
 function zeige(wer){
   var box=document.getElementById('nl-'+wer); if(!box)return;
@@ -843,21 +907,30 @@ function sprich(knopf,text,stimme,tempo,hoehe,wer){
   if(lief)return;
   if(knopf)knopf.classList.add('aktiv');
   var name=wer||(knopf?knopf.getAttribute('data-agent'):null);
+  function fertig(){ if(knopf)knopf.classList.remove('aktiv') }
+  function spieleDatei(){
+    /* Vorproduzierte Stimme (funktioniert auch online) */
+    if(!name||VORPRODUZIERT.indexOf(name)<0){ sprichMac(knopf,text,stimme,tempo,hoehe); return }
+    var audio=new Audio('stimmen/'+name+'.mp3');
+    LAUFENDES_AUDIO=audio;
+    audio.onended=fertig;
+    audio.onerror=function(){ sprichMac(knopf,text,stimme,tempo,hoehe) };
+    audio.play().catch(function(){ sprichMac(knopf,text,stimme,tempo,hoehe) });
+  }
   if(name && location.protocol.indexOf('http')===0){
+    /* Zuerst die Live-Stimme vom Agenten-Server versuchen */
     fetch('/stimme',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({agent:name,text:text})})
      .then(function(r){ if(r.status!==200)throw 0; return r.blob() })
      .then(function(b){
        var audio=new Audio(URL.createObjectURL(b));
-       LAUFENDES_AUDIO=audio;
-       if(knopf){audio.onended=function(){knopf.classList.remove('aktiv')};
-                 audio.onerror=function(){knopf.classList.remove('aktiv')}}
+       LAUFENDES_AUDIO=audio; audio.onended=fertig; audio.onerror=fertig;
        audio.play();
      })
-     .catch(function(){ sprichMac(knopf,text,stimme,tempo,hoehe) });
+     .catch(spieleDatei);
     return;
   }
-  sprichMac(knopf,text,stimme,tempo,hoehe);
+  spieleDatei();
 }
 function sprichMac(knopf,text,stimme,tempo,hoehe){
   if(!('speechSynthesis' in window)){if(knopf)knopf.classList.remove('aktiv');return}
@@ -894,8 +967,15 @@ function briefing(knopf){
          var audio=new Audio(URL.createObjectURL(b));
          LAUFENDES_AUDIO=audio; audio.onended=weiter; audio.onerror=weiter; audio.play();
        })
-       .catch(function(){ macStueck(t) });
-    } else { macStueck(t) }
+       .catch(function(){ dateiStueck(t) });
+    } else { dateiStueck(t) }
+  }
+  function dateiStueck(t){
+    if(VORPRODUZIERT.indexOf(t.wer)<0){ macStueck(t); return }
+    var audio=new Audio('stimmen/'+t.wer+'.mp3');
+    LAUFENDES_AUDIO=audio; audio.onended=weiter;
+    audio.onerror=function(){ macStueck(t) };
+    audio.play().catch(function(){ macStueck(t) });
   }
   function macStueck(t){
     var a=new SpeechSynthesisUtterance(t.text);
@@ -965,7 +1045,8 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<div class='eyebrow'>// Team-Funk</div>"
         f"<div class='tile'><div class='feed'>{feed_html}</div></div>"
         "<footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer>"
-        + NOTIZ_SKRIPT.replace("__STIMMEN__", json.dumps(STIMMEN)) +
+        + NOTIZ_SKRIPT.replace("__STIMMEN__", json.dumps(STIMMEN))
+                      .replace("__VORPRODUZIERT__", json.dumps(sorted(stimmen_da))) +
         "</body></html>")
 
 with open(DASHBOARD_DATEI, "w", encoding="utf-8") as d:
