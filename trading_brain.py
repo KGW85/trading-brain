@@ -32,6 +32,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 STATUS_DATEI = os.path.join(HIER, "brain_status.json")
 DASHBOARD_DATEI = os.path.join(HIER, "dashboard.html")
 DEPOT_DATEI = os.path.join(HIER, "depot_positionen.json")
+JOURNAL_DATEI = os.path.join(HIER, "journal.json")
 
 # Laeuft dieses Programm online (GitHub) statt auf deinem Mac?
 # Dann bleiben deine Euro-Betraege aus dem Dashboard heraus (Privatsphaere).
@@ -87,6 +88,71 @@ def hole_kurse(symbol):
     except (KeyError, IndexError, TypeError):
         raise RuntimeError("Keine Kursdaten von Yahoo (Symbol pruefen?)")
     return [float(c) for c in closes if c is not None]
+
+
+# ======================================================================
+#   CLARA - Chronistin: schreibt jeden Lauf mit (Grundlage fuer die Kurve)
+# ======================================================================
+def lies_journal():
+    if not os.path.exists(JOURNAL_DATEI):
+        return []
+    try:
+        return json.load(open(JOURNAL_DATEI, encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def schreibe_journal(eintraege, neuer):
+    """Ein Eintrag pro Tag - ein spaeterer Lauf ersetzt den frueheren."""
+    tag = neuer["tag"]
+    eintraege = [e for e in eintraege if e.get("tag") != tag]
+    eintraege.append(neuer)
+    eintraege.sort(key=lambda e: e["tag"])
+    eintraege = eintraege[-400:]              # gut zwei Jahre aufheben
+    try:
+        json.dump(eintraege, open(JOURNAL_DATEI, "w", encoding="utf-8"),
+                  ensure_ascii=False, indent=1)
+    except Exception as f:
+        print("  Journal nicht gespeichert:", f)
+    return eintraege
+
+
+def baue_kurve(punkte, breite=260, hoehe=52):
+    """Kleine Linie (SVG) aus einer Zahlenreihe - fuer die Wertentwicklung."""
+    if len(punkte) < 2:
+        return ""
+    tief, hoch = min(punkte), max(punkte)
+    spanne = (hoch - tief) or 1
+    schritt = breite / (len(punkte) - 1)
+    stellen = " ".join(
+        f"{i * schritt:.1f},{hoehe - 4 - (p - tief) / spanne * (hoehe - 8):.1f}"
+        for i, p in enumerate(punkte))
+    farbe = "var(--green)" if punkte[-1] >= punkte[0] else "var(--red)"
+    return (f'<svg viewBox="0 0 {breite} {hoehe}" preserveAspectRatio="none" '
+            f'style="width:100%;height:{hoehe}px;overflow:visible">'
+            f'<polyline points="{stellen}" fill="none" stroke="{farbe}" '
+            f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>')
+
+
+# ======================================================================
+#   DR. JULIAN WINTER - Jurist: schaetzt die Steuer auf Kursgewinne
+# ======================================================================
+# Deutschland: 25 % Abgeltungssteuer + 5,5 % Soli darauf = 26,375 %.
+# Aktien-ETFs sind zu 30 % teilfreigestellt -> nur 70 % des Gewinns zaehlen.
+# Sparerpauschbetrag: 1.000 EUR Gewinn pro Jahr bleiben steuerfrei (Einzelperson).
+STEUERSATZ = 0.26375
+TEILFREISTELLUNG = 0.30
+SPARERPAUSCHBETRAG = 1000
+
+
+def schaetze_steuer(gewinn_eur, schon_genutzt=0):
+    """Was bliebe nach Steuern, wenn du jetzt alles mit Gewinn verkaufst?"""
+    if gewinn_eur <= 0:
+        return 0.0, max(0, SPARERPAUSCHBETRAG - schon_genutzt)
+    steuerpflichtig = gewinn_eur * (1 - TEILFREISTELLUNG)
+    frei = max(0, SPARERPAUSCHBETRAG - schon_genutzt)
+    zu_versteuern = max(0, steuerpflichtig - frei)
+    return zu_versteuern * STEUERSATZ, max(0, frei - steuerpflichtig)
 
 
 # ======================================================================
@@ -297,6 +363,7 @@ if depot_zahlen:
     wert_block = f"<div><div class='n'>{d_wert}&euro;</div><div class='l'>Depotwert</div></div>"
     gv_block = f"<div><div class='n' style='color:{gv_farbe}'>{d_gewinn:+d}&euro;</div><div class='l'>Gewinn/Verlust</div></div>"
 else:
+    d_wert = d_gewinn = d_pct = None
     if ONLINE:
         doro_txt = f'&bdquo;Modus {modus_label}: {len(gehalten_liste)} Wert(e) im Depot. Betraege bleiben privat.&ldquo;'
         wert_block = f"<div><div class='n'>{MODUS_ANZAHL.get(MODUS, 2)}</div><div class='l'>Plaetze</div></div>"
@@ -304,6 +371,33 @@ else:
         doro_txt = f'&bdquo;Modus {modus_label}: ich halte {len(gehalten_liste)} Wert(e), je ~{betrag} &euro;.&ldquo;'
         wert_block = f"<div><div class='n'>{kapital_txt}&euro;</div><div class='l'>Kapital</div></div>"
     gv_block = ""
+
+# Clara: diesen Lauf ins Journal schreiben (Grundlage fuer die Kurve)
+journal = lies_journal()
+eintrag = {
+    "tag": jetzt.strftime("%Y-%m-%d"),
+    "zeit": jetzt.strftime("%H:%M"),
+    "modus": MODUS,
+    "gehalten": sorted(gehalten_namen),
+    "signale": signale,
+    "maerkte": {e["markt"]: {"kurs": e["kurs"], "abstand": e["abstand"],
+                             "momentum": e["momentum"], "gehalten": e["gehalten"]}
+                for e in ok},
+}
+if depot_zahlen:
+    eintrag["depot"] = {"wert": d_wert, "investiert": d_inv, "gewinn": d_gewinn, "prozent": d_pct}
+journal = schreibe_journal(journal, eintrag)
+print(f"  Clara: Journal-Eintrag {len(journal)} gespeichert.")
+
+# Kurve der Wertentwicklung (nur wo echte Depotwerte vorliegen)
+werte_reihe = [e["depot"]["wert"] for e in journal if e.get("depot")]
+kurve_html = baue_kurve(werte_reihe)
+tage_gefuehrt = len(journal)
+if len(werte_reihe) >= 2:
+    seit_start = werte_reihe[-1] - werte_reihe[0]
+    kurve_info = f"{len(werte_reihe)} Tage aufgezeichnet &middot; {seit_start:+d} &euro; seit Beginn"
+else:
+    kurve_info = f"{tage_gefuehrt} Tag(e) aufgezeichnet &middot; Kurve entsteht ab dem 2. Tag"
 
 # Ampel-Kacheln (gehaltene Werte mit gruenem Rahmen + Stern)
 ampel = ""
@@ -324,6 +418,22 @@ else:
 naechster = min(ok, key=lambda e: abs(e["abstand"])) if ok else None
 nah_txt = f'{naechster["markt"]} ({naechster["abstand"]:+.1f}%)' if naechster else "-"
 
+# Dr. Julian Winter: Steuerlage einschaetzen
+if depot_zahlen and d_gewinn is not None:
+    steuer, rest_frei = schaetze_steuer(d_gewinn)
+    if d_gewinn <= 0:
+        julian_txt = (f'&bdquo;Aktuell {d_gewinn:+d} &euro; &ndash; kein steuerbarer Gewinn. '
+                      f'Freibetrag {SPARERPAUSCHBETRAG} &euro; unangetastet.&ldquo;')
+    elif steuer <= 0:
+        julian_txt = (f'&bdquo;Gewinn {d_gewinn:+d} &euro; liegt im Freibetrag. '
+                      f'Verkauf waere heute steuerfrei; noch {rest_frei:.0f} &euro; Puffer.&ldquo;')
+    else:
+        julian_txt = (f'&bdquo;Bei Verkauf heute: rund {steuer:.0f} &euro; Steuer auf {d_gewinn} &euro; Gewinn '
+                      f'(nach Teilfreistellung).&ldquo;')
+else:
+    julian_txt = ('&bdquo;Aktien-ETFs: 26,375 % auf 70 % des Gewinns, '
+                  f'{SPARERPAUSCHBETRAG} &euro; pro Jahr steuerfrei.&ldquo;')
+
 sina_txt = (f'&bdquo;{len(signale)} Depot-Aenderung(en) heute &ndash; bitte handeln!&ldquo;'
             if signale else '&bdquo;Depot unveraendert &ndash; ich bleibe wachsam.&ldquo;')
 rico_txt = ('&bdquo;Modus Offensiv &ndash; groessere Schwankungen sind eingeplant. Augen auf.&ldquo;'
@@ -336,12 +446,11 @@ agenten = [
     ("&#128737;", "Rico", "Risiko-Waechter &middot; Veto", rico_txt, "ready", "Bereit"),
     ("&#128301;", "Mira", "Markt-Beobachterin &middot; Fruehwarnung",
      f'&bdquo;Am naechsten an der Linie: {nah_txt}. Den beobachte ich genau.&ldquo;', "ready", "Bereit"),
-    ("&#128221;", "Clara", "Chronistin &middot; automatisch",
-     f'&bdquo;Alles protokolliert. Letzter Lauf: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;', "ready", "Bereit"),
+    ("&#128221;", "Clara", "Chronistin &middot; Journal",
+     f'&bdquo;{tage_gefuehrt} Tag(e) im Journal. Letzter Eintrag: {jetzt.strftime("%d.%m. %H:%M")}.&ldquo;', "ready", "Bereit"),
     ("&#127758;", "Viktor", "Welt-Stratege &middot; Nachrichten",
      f'&bdquo;{len(nachrichten)} relevante Schlagzeilen gesichtet. Thema heute: {themen_txt}.&ldquo;', "ready", "Bereit"),
-    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern",
-     '&bdquo;Ich uebernehme kuenftig Steuern und Rechtsfragen. Noch im Aufbau.&ldquo;', "soon", "In Vorbereitung"),
+    ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern", julian_txt, "ready", "Bereit"),
 ]
 agent_html = ""
 for ic, nm, role, last, scls, slabel in agenten:
@@ -357,6 +466,8 @@ feed_items = [
      ("Es gibt was zu tun: " + "; ".join(signale)) if signale else "Depot unveraendert - heute nichts zu tun."),
     ("Do", jetzt.strftime("%H:%M") + " &middot; Doro",
      f'Depot: {haltetext}.' + ('' if ONLINE else f' Vorschlag je ~{betrag} Euro pro Wert.')),
+    ("Cl", jetzt.strftime("%H:%M") + " &middot; Clara",
+     f'Eintrag {tage_gefuehrt} ins Journal geschrieben. Ich sammle deine Historie.'),
     ("Vi", jetzt.strftime("%H:%M") + " &middot; Viktor",
      f'Weltlage gesichtet: {len(nachrichten)} relevante Meldungen. Schwerpunkt: {themen_txt}.'),
     ("Mi", jetzt.strftime("%H:%M") + " &middot; Mira",
@@ -435,7 +546,12 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<div class='eyebrow'>// Systeme &amp; Team-Funk</div>"
         "<div class='sysgrid'>"
         f"<div class='tile'><h4>&#128682; Markt-Ampel</h4><div class='amp'>{ampel}</div></div>"
-        f"<div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>{tun}</div></div>"
+        f"<div class='tile'><h4>&#9989; Heute zu tun</h4><div class='todo'>{tun}</div>"
+        + (f"<div style='margin-top:14px;padding-top:12px;border-top:1px solid var(--line)'>"
+           f"<div style='font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-bottom:6px'>"
+           f"Wertentwicklung</div>{kurve_html}"
+           f"<div style='font-size:10.5px;color:var(--dim);margin-top:4px'>{kurve_info}</div></div>"
+           if not ONLINE else "") + "</div>"
         f"<div class='tile'><h4>&#128251; Team-Funk</h4><div class='feed'>{feed_html}</div></div>"
         "</div>"
         "<div class='eyebrow' style='margin-top:32px'>// Viktors Weltlage</div>"
