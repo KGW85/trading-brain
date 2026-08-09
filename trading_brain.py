@@ -457,6 +457,10 @@ if signale:
         "\n".join(signale) + f"\n\nStand: {jetzt.strftime('%d.%m. %H:%M')}",
         dringend=True,
     )
+elif ONLINE:
+    # In der Cloud nur bei echten Signalen melden - die taegliche Routine-Info
+    # kommt vom Mac (dort mit deinen Euro-Betraegen).
+    print("  Kein Signal - online wird keine Routine-Meldung gesendet.")
 else:
     zusatz = f"Depotwert {d_wert} € ({d_gewinn:+d} € / {d_pct:+.1f}%).\n" if depot_zahlen else ""
     sende_push(
