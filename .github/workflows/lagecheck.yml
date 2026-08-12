@@ -1,34 +1,72 @@
-name: Trading Brain veroeffentlichen
+name: Trading Brain Lagecheck
+
+# Laeuft dreimal taeglich in der Cloud - unabhaengig davon, ob Kilians Mac an ist.
+# Erzeugt KI-Texte, echte Stimmen, schickt Push und veroeffentlicht das Dashboard.
 
 on:
+  schedule:
+    # Zeiten in UTC! Deutsche Sommerzeit = UTC + 2
+    - cron: "55 6 * * 1-5"    # 08:55 - vor Boersenstart Frankfurt
+    - cron: "45 13 * * 1-5"   # 15:45 - nach Boersenstart USA
+    - cron: "15 20 * * 1-5"   # 22:15 - nach Boersenschluss USA
   push:
-    branches: [main]
+    paths:
+      - "trading_brain.py"
+      - ".github/workflows/lagecheck.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 jobs:
-  veroeffentlichen:
+  lagecheck:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests anthropic
+
+      - name: Lagecheck ausfuehren
+        env:
+          TRADING_BRAIN_ONLINE: "1"
+          NTFY_KANAL: ${{ secrets.NTFY_KANAL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python trading_brain.py
+
+      - name: Ergebnis speichern
+        run: |
+          git config user.name "Trading Brain"
+          git config user.email "actions@github.com"
+          git add dashboard.html brain_status.json
+          git diff --staged --quiet || git commit -m "Lagecheck"
+          git push
 
       - name: Seite vorbereiten
         run: |
           mkdir -p _site
           cp dashboard.html _site/index.html
-          [ -f logo.png ] && cp logo.png _site/ || true
-          [ -d stimmen ] && cp -r stimmen _site/ || true
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  veroeffentlichen:
+    needs: lagecheck
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
 
       - name: Auf GitHub Pages veroeffentlichen
         id: deployment
