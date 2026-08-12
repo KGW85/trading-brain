@@ -1,14 +1,10 @@
 name: Trading Brain Lagecheck
 
-# Laeuft dreimal taeglich in der Cloud - unabhaengig davon, ob Kilians Mac an ist.
-# Erzeugt KI-Texte, echte Stimmen, schickt Push und veroeffentlicht das Dashboard.
-
 on:
   schedule:
-    # Zeiten in UTC! Deutsche Sommerzeit = UTC + 2
-    - cron: "55 6 * * 1-5"    # 08:55 - vor Boersenstart Frankfurt
-    - cron: "45 13 * * 1-5"   # 15:45 - nach Boersenstart USA
-    - cron: "15 20 * * 1-5"   # 22:15 - nach Boersenschluss USA
+    - cron: "55 6 * * 1-5"
+    - cron: "45 13 * * 1-5"
+    - cron: "15 20 * * 1-5"
   push:
     paths:
       - "trading_brain.py"
@@ -17,8 +13,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   lagecheck:
@@ -60,14 +54,12 @@ jobs:
   veroeffentlichen:
     needs: lagecheck
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
-
-
-      - name: Auf GitHub Pages veroeffentlichen
-        id: deployment
         uses: actions/deploy-pages@v4
