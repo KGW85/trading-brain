@@ -760,7 +760,9 @@ def meldung(name, standard):
 stimmen_da = set()
 if STIMM_SCHLUESSEL:
     for _name in OPENAI_STIMMEN:
-        _text = (ki_saetze or {}).get(_name, "")
+        # Georgs Meldung entsteht getrennt von den uebrigen Agenten
+        _text = (georg or {}).get("meldung", "") if _name == "Georg" \
+            else (ki_saetze or {}).get(_name, "")
         if _text and erzeuge_stimmdatei(_name, _text.strip()):
             stimmen_da.add(_name)
     if stimmen_da:
