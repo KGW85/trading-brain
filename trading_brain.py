@@ -97,14 +97,15 @@ STIMMEN_ORDNER = os.path.join(HIER, "stimmen")
 
 # Stimme + Tempo + Regieanweisung je Agent (gleich wie im Agenten-Server)
 OPENAI_STIMMEN = {
-    "Theo":   ("echo",    1.06, "Sprich ruhig und sachlich, aber zuegig - wie ein erfahrener Analyst."),
-    "Sina":   ("nova",    1.10, "Sprich wach, klar und aufmerksam - du meldest Wichtiges."),
-    "Doro":   ("shimmer", 1.02, "Sprich freundlich, warm und gelassen, wie eine hilfsbereite Kollegin."),
-    "Rico":   ("onyx",    0.98, "Sprich tief und ernst, mit ruhigem Nachdruck - du warnst."),
-    "Mira":   ("coral",   1.12, "Sprich lebhaft, hell und neugierig - als haettest du etwas entdeckt."),
-    "Clara":  ("ballad",  0.92, "Sprich langsam, weich und erzaehlend, mit ruhigen Pausen."),
-    "Viktor": ("fable",   1.08, "Sprich klar, flott und sachlich wie ein Nachrichtensprecher."),
-    "Winter": ("ash",     1.0,  "Sprich seriös, praezise und wuerdevoll, wie ein erfahrener Jurist."),
+    "Theo":   ("echo",    1.15, "Sprich ruhig und sachlich, aber zuegig - wie ein erfahrener Analyst."),
+    "Sina":   ("sage",    1.19, "Du bist eine junge, wache Frau. Sprich mit heller, klarer, eindeutig weiblicher Stimme - aufmerksam und bestimmt, du meldest etwas Wichtiges."),
+    "Doro":   ("shimmer", 1.11, "Sprich freundlich, warm und gelassen, wie eine hilfsbereite Kollegin."),
+    "Rico":   ("onyx",    1.07, "Sprich tief und ernst, mit ruhigem Nachdruck - du warnst."),
+    "Mira":   ("coral",   1.21, "Sprich lebhaft, hell und neugierig - als haettest du etwas entdeckt."),
+    "Clara":  ("nova",  1.0, "Du bist eine Frau mittleren Alters. Sprich mit klarer, warmer, eindeutig weiblicher Stimme - ruhig und bedaechtig, mit Pausen, wie eine Archivarin, die sorgfaeltig Protokoll fuehrt."),
+    "Viktor": ("fable",   1.17, "Sprich klar, flott und sachlich wie ein Nachrichtensprecher."),
+    "Winter": ("ash",     1.09,  "Sprich seriös, praezise und wuerdevoll, wie ein erfahrener Jurist."),
+    "Georg":  ("verse",   1.18, "Du bist ein wacher, offensiver Mann, der Chancen wittert. Sprich schnell, lebendig und mit Spannung in der Stimme - wie jemand, der gerade etwas Interessantes entdeckt hat."),
 }
 
 
@@ -118,7 +119,7 @@ def erzeuge_stimmdatei(agent, text):
             "https://api.openai.com/v1/audio/speech",
             headers={"Authorization": f"Bearer {STIMM_SCHLUESSEL}"},
             json={"model": "gpt-4o-mini-tts", "voice": stimme, "input": text[:4000],
-                  "instructions": anweisung + " Sprich auf Deutsch, natuerlich und nicht abgelesen.",
+                  "instructions": anweisung + " Sprich auf Deutsch, natuerlich, lebendig und in zuegigem Tempo - nicht schleppend und nicht abgelesen.",
                   "speed": tempo, "response_format": "mp3"}, timeout=60)
         if a.status_code != 200:
             return False
@@ -148,6 +149,70 @@ Regeln:
 - Keine Anlageberatung, keine Kursprognosen, kein "du solltest kaufen".
 - Kein Markdown, keine Anfuehrungszeichen, keine Emojis."""
 
+# ---- Georg der Gambler: sucht Zusammenhaenge zwischen Weltlage und Aktien ----
+GEORG_AUFTRAG = """Du bist Georg, genannt "der Gambler" - der offensivste Kopf in
+Kilians Trading-Team. Waehrend die anderen das disziplinierte Trendmodell huten,
+ist dein Job: aus der aktuellen Nachrichtenlage ableiten, welche Branchen und
+welche einzelnen Aktien gerade in Bewegung kommen koennten.
+
+Du denkst in Ursache und Wirkung: Eskalation in einem Konflikt -> Ruestung
+(Rheinmetall, Hensoldt, Thales). Mehr KI-Rechenleistung gefragt -> Chips und
+Energie (Nvidia, ASML, Siemens Energy). Zinssenkung -> Wachstumswerte und Krypto.
+Lieferkette gestoert -> Rohstoffe und Logistik.
+
+Deine Regeln:
+- Melde dich NUR, wenn es heute wirklich einen Auslöser in den Schlagzeilen gibt.
+  Ist nichts Handfestes dabei, sag das ehrlich und knapp.
+- Nenne konkrete Unternehmen mit Namen, damit Kilian weiss, wovon du sprichst.
+- Du gibst KEINE Kaufempfehlung und keine Kursprognose. Du zeigst den
+  Zusammenhang und sagst dazu, was dagegen spricht - jede Wette hat zwei Seiten.
+- Sag immer klar, wie spekulativ die Sache ist.
+- Du sprichst - kein Markdown, keine Aufzaehlungszeichen, keine Emojis."""
+
+GEORG_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "auslöser": {"type": "boolean"},
+        "meldung": {"type": "string"},
+        "thema": {"type": "string"},
+        "werte": {"type": "array", "items": {"type": "string"}},
+        "dagegen": {"type": "string"},
+        "hitze": {"type": "string", "enum": ["kalt", "lauwarm", "heiss", "gluehend"]},
+    },
+    "required": ["auslöser", "meldung", "thema", "werte", "dagegen", "hitze"],
+    "additionalProperties": False,
+}
+
+
+def frage_georg(schlagzeilen, lage):
+    """Laesst Georg die Nachrichtenlage auf heisse Eisen abklopfen."""
+    if not KI_AN or not schlagzeilen:
+        return None
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=KI_SCHLUESSEL)
+        zeilen = "\n".join(f"- {n['titel']} ({n['quelle']})" for n in schlagzeilen[:18])
+        a = client.messages.create(
+            model=KI_MODELL, max_tokens=1200, system=GEORG_AUFTRAG,
+            output_config={"effort": "low", "format": {
+                "type": "json_schema", "schema": GEORG_SCHEMA}},
+            messages=[{"role": "user", "content":
+                       f"Heutige Schlagzeilen:\n{zeilen}\n\n"
+                       f"Kilians Depot-Lage:\n{lage}\n\n"
+                       f"Siehst du heute ein heisses Eisen? "
+                       f"'auslöser' ist wahr, wenn es wirklich etwas Konkretes gibt. "
+                       f"'meldung' ist dein gesprochener Satz an Kilian (2-3 Saetze). "
+                       f"'hitze' schaetzt ein, wie spekulativ die Sache ist."}],
+        )
+        text = next(b.text for b in a.content if b.type == "text")
+        kosten = (a.usage.input_tokens * 5 + a.usage.output_tokens * 25) / 1_000_000
+        print(f"  Georg: Nachrichtenlage geprueft (~{kosten:.3f} USD)")
+        return json.loads(text)
+    except Exception as fehler:
+        print("  Georg nicht erreichbar:", str(fehler)[:80])
+        return None
+
+
 AGENTEN_SCHEMA = {
     "type": "object",
     "properties": {name: {"type": "string"} for name in
@@ -162,6 +227,17 @@ def frage_ki(lage_text):
     Gibt ein dict {Name: Satz} zurueck - oder None, wenn etwas schiefgeht."""
     if not KI_AN:
         return None
+    # Bei Netzproblemen (z.B. WLAN noch im Ruhezustand) kurz warten und neu versuchen
+    import time
+    for versuch in range(1, 4):
+        try:
+            import socket
+            socket.gethostbyname("api.anthropic.com")
+            break
+        except Exception:
+            if versuch < 3:
+                print(f"  Warte auf Internet ... ({versuch})")
+                time.sleep(versuch * 20)
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=KI_SCHLUESSEL)
@@ -186,23 +262,31 @@ def frage_ki(lage_text):
 
 
 def sende_push(titel, text, dringend=False):
-    """Schickt eine Benachrichtigung an dein iPhone (ntfy). Fehler stoeren nie den Rest."""
+    """Schickt eine Benachrichtigung an dein iPhone (ntfy).
+    Versucht es mehrfach - z.B. wenn das WLAN nach dem Ruhezustand noch schlaeft."""
     if not NTFY_AN:
         return
-    try:
-        requests.post(
-            f"https://ntfy.sh/{NTFY_KANAL}",
-            data=text.encode("utf-8"),
-            headers={
-                "Title": titel.encode("utf-8"),
-                "Priority": "urgent" if dringend else "default",
-                "Tags": "rotating_light" if dringend else "chart_with_upwards_trend",
-            },
-            timeout=15,
-        )
-        print("  Push ans iPhone gesendet.")
-    except Exception as fehler:
-        print("  Push nicht gesendet (kein Internet?):", fehler)
+    import time
+    for versuch in range(1, 5):          # bis zu 4 Versuche ueber ~2 Minuten
+        try:
+            requests.post(
+                f"https://ntfy.sh/{NTFY_KANAL}",
+                data=text.encode("utf-8"),
+                headers={
+                    "Title": titel.encode("utf-8"),
+                    "Priority": "urgent" if dringend else "default",
+                    "Tags": "rotating_light" if dringend else "chart_with_upwards_trend",
+                },
+                timeout=20,
+            )
+            print(f"  Push ans iPhone gesendet.{'' if versuch == 1 else f' (Versuch {versuch})'}")
+            return
+        except Exception as fehler:
+            if versuch < 4:
+                print(f"  Kein Netz - neuer Versuch in {versuch * 20} Sekunden ...")
+                time.sleep(versuch * 20)
+            else:
+                print("  Push endgueltig nicht gesendet:", str(fehler)[:80])
 
 
 def hole_kurse(symbol):
@@ -636,6 +720,33 @@ if nachrichten:
 
 ki_saetze = frage_ki("\n".join(lage_fuer_ki))
 
+# Georg prueft die Nachrichtenlage auf heisse Eisen
+georg = frage_georg(nachrichten, "\n".join(lage_fuer_ki))
+if georg:
+    georg_txt = "&bdquo;" + html_mod.escape(georg.get("meldung", "").strip()) + "&ldquo;"
+    if georg.get("auslöser"):
+        farbe = {"gluehend": "var(--red)", "heiss": "#e8a33d",
+                 "lauwarm": "var(--teal)", "kalt": "var(--dim)"}.get(georg.get("hitze"), "var(--teal)")
+        werte = "".join(f'<span class="tag">{html_mod.escape(w)}</span>'
+                        for w in georg.get("werte", [])[:6])
+        georg_details = (
+            f'<div class="dtitel">Heisses Eisen &middot; '
+            f'<span style="color:{farbe}">{html_mod.escape(georg.get("hitze","")).upper()}</span></div>'
+            f'<div style="font-size:12.5px;line-height:1.5;margin-bottom:8px">'
+            f'{html_mod.escape(georg.get("thema",""))}</div>'
+            f'<div class="nwm" style="margin-bottom:10px">{werte}</div>'
+            f'<div class="dtitel">Was dagegen spricht</div>'
+            f'<div style="font-size:12px;color:var(--muted);line-height:1.5">'
+            f'{html_mod.escape(georg.get("dagegen",""))}</div>')
+        georg_status, georg_label = "ready", "Witterung"
+    else:
+        georg_details = ('<div class="dinfo">Heute kein Auslöser in den Schlagzeilen. '
+                         'Georg meldet sich nur, wenn wirklich etwas in Bewegung kommt.</div>')
+        georg_status, georg_label = "soon", "Ruhig"
+else:
+    georg_txt = '&bdquo;Ich halte die Augen offen, komme aber gerade nicht an die Nachrichten.&ldquo;'
+    georg_details, georg_status, georg_label = "", "soon", "Ruhig"
+
 
 def meldung(name, standard):
     """Nimmt den KI-Satz, wenn vorhanden - sonst den festen Text."""
@@ -668,6 +779,7 @@ STIMMEN = {
     "Clara":   ("Grandma", 0.95, 1.00),   # bedaechtig, erzaehlend
     "Viktor":  ("Eddy",    1.02, 0.92),   # nachrichtensprecher-artig
     "Winter":  ("Grandpa", 0.90, 0.88),   # aelter, seriös - der Jurist
+    "Georg":   ("Rocko",   1.10, 1.02),   # offensiv, wach - der Gambler
 }
 
 agenten = [
@@ -691,10 +803,12 @@ agenten = [
      "ready", "Bereit", viktor_details),
     ("&#9878;", "Dr. Julian Winter", "Jurist &middot; Recht &amp; Steuern",
      meldung("Winter", julian_txt), "ready", "Bereit", ""),
+    ("&#127922;", "Georg", "Der Gambler &middot; heisse Eisen",
+     georg_txt, georg_status, georg_label, georg_details),
 ]
 agent_html = ""
 for ic, nm, role, last, scls, slabel, details in agenten:
-    breit = " weit" if details else ""     # Karten mit Details bekommen mehr Platz
+    breit = ""                             # alle Agenten gleich gross
     detail_html = f'<div class="details">{details}</div>' if details else ""
     kurz = nm.split()[-1] if nm.startswith("Dr.") else nm     # "Winter" statt "Dr. Julian Winter"
     # Notizfeld: du kannst jedem Agenten etwas hinterlassen (wird im Browser gemerkt)
@@ -776,10 +890,11 @@ padding:6px 14px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:poi
 .sysgrid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:14px}
 .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
 .tile h4{font-size:13px;font-weight:600;margin-bottom:6px}
-.amp{display:flex;gap:12px;margin-top:10px}
-.amp .m{flex:1;text-align:center;background:var(--panel2);border-radius:10px;padding:10px 4px}
-.amp .m .dot{width:11px;height:11px;border-radius:50%;margin:0 auto 6px}
-.amp .m .nm{font-size:12px;font-weight:600}.amp .m .st{font-size:10px;color:var(--dim);margin-top:2px}
+.amp{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:8px 0 4px}
+.amp .m{text-align:center;background:var(--panel2);border-radius:8px;padding:7px 2px;min-width:0}
+.amp .m .dot{width:8px;height:8px;border-radius:50%;margin:0 auto 4px}
+.amp .m .nm{font-size:9.5px;font-weight:600;line-height:1.2;word-break:break-word}
+.amp .m .st{font-size:8.5px;color:var(--dim);margin-top:2px;line-height:1.2}
 .g .dot{background:var(--green);box-shadow:0 0 10px rgba(62,207,142,.5)}
 .r .dot{background:var(--red);box-shadow:0 0 10px rgba(229,100,90,.5)}
 .amp .m.held{box-shadow:inset 0 0 0 1px var(--green)}
@@ -788,7 +903,14 @@ padding:6px 14px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:poi
 .feed .f:last-child{border-bottom:0}
 .feed .av{width:26px;height:26px;border-radius:7px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--teal)}
 .feed .fmeta{font-size:10px;color:var(--dim);margin-bottom:2px}.feed .ftxt{font-size:12px}
-.card.weit{grid-column:span 2}
+/* Alle Agenten gleich gross - gleiches Raster, gleiche Hoehe */
+.grid{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));align-items:stretch;gap:14px}
+.card{display:flex;flex-direction:column;height:440px}
+.card .details{flex:1;min-height:0;overflow-y:auto}
+.card .notiz{margin-top:auto;flex-shrink:0}
+.card .details::-webkit-scrollbar{width:5px}
+.card .details::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+@media(max-width:700px){.card{height:auto;min-height:340px}}
 .details{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .dtitel{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-bottom:7px;font-weight:600}
 .dinfo{font-size:10.5px;color:var(--dim);margin-top:4px}
@@ -834,6 +956,7 @@ footer{margin-top:28px;color:var(--dim);font-size:11px;text-align:center}
 NOTIZ_SKRIPT = """<script>
 var STIMMEN=__STIMMEN__;
 var VORPRODUZIERT=__VORPRODUZIERT__;
+var AUDIO=__AUDIO__;      /* Stimmen direkt in dieser Datei - laeuft ueberall */
 function notizen(){try{return JSON.parse(localStorage.getItem('tb_notizen')||'{}')}catch(e){return {}}}
 function zeige(wer){
   var box=document.getElementById('nl-'+wer); if(!box)return;
@@ -911,7 +1034,7 @@ function sprich(knopf,text,stimme,tempo,hoehe,wer){
   function spieleDatei(){
     /* Vorproduzierte Stimme (funktioniert auch online) */
     if(!name||VORPRODUZIERT.indexOf(name)<0){ sprichMac(knopf,text,stimme,tempo,hoehe); return }
-    var audio=new Audio('stimmen/'+name+'.mp3');
+    var audio=new Audio(AUDIO[name]||('stimmen/'+name+'.mp3'));
     LAUFENDES_AUDIO=audio;
     audio.onended=fertig;
     audio.onerror=function(){ sprichMac(knopf,text,stimme,tempo,hoehe) };
@@ -972,7 +1095,7 @@ function briefing(knopf){
   }
   function dateiStueck(t){
     if(VORPRODUZIERT.indexOf(t.wer)<0){ macStueck(t); return }
-    var audio=new Audio('stimmen/'+t.wer+'.mp3');
+    var audio=new Audio(AUDIO[t.wer]||('stimmen/'+t.wer+'.mp3'));
     LAUFENDES_AUDIO=audio; audio.onended=weiter;
     audio.onerror=function(){ macStueck(t) };
     audio.play().catch(function(){ macStueck(t) });
@@ -1026,6 +1149,21 @@ def lies_logo():
 
 LOGO = lies_logo()
 
+
+def eingebettete_stimmen():
+    """Packt die vorproduzierten Stimmen direkt in die Dashboard-Datei,
+    damit sie ueberall funktionieren - auch online, ohne Extra-Ordner."""
+    import base64
+    audio = {}
+    if not os.path.isdir(STIMMEN_ORDNER):
+        return audio
+    for name in OPENAI_STIMMEN:
+        pfad = os.path.join(STIMMEN_ORDNER, f"{name}.mp3")
+        if os.path.exists(pfad):
+            b64 = base64.b64encode(open(pfad, "rb").read()).decode("ascii")
+            audio[name] = "data:audio/mpeg;base64," + b64
+    return audio
+
 html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>Trading Brain</title><style>" + CSS + "</style></head><body>"
@@ -1046,7 +1184,8 @@ html = ("<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>"
         f"<div class='tile'><div class='feed'>{feed_html}</div></div>"
         "<footer>Automatisch erzeugt von deinem trading_brain-Programm &middot; echte Kursdaten</footer>"
         + NOTIZ_SKRIPT.replace("__STIMMEN__", json.dumps(STIMMEN))
-                      .replace("__VORPRODUZIERT__", json.dumps(sorted(stimmen_da))) +
+                      .replace("__VORPRODUZIERT__", json.dumps(sorted(stimmen_da)))
+                      .replace("__AUDIO__", json.dumps(eingebettete_stimmen())) +
         "</body></html>")
 
 with open(DASHBOARD_DATEI, "w", encoding="utf-8") as d:
@@ -1063,10 +1202,6 @@ if signale:
         "\n".join(signale) + f"\n\nStand: {jetzt.strftime('%d.%m. %H:%M')}",
         dringend=True,
     )
-elif ONLINE:
-    # In der Cloud nur bei echten Signalen melden - die taegliche Routine-Info
-    # kommt vom Mac (dort mit deinen Euro-Betraegen).
-    print("  Kein Signal - online wird keine Routine-Meldung gesendet.")
 else:
     zusatz = f"Depotwert {d_wert} € ({d_gewinn:+d} € / {d_pct:+.1f}%).\n" if depot_zahlen else ""
     sende_push(
