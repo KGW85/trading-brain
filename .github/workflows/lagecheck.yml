@@ -1,10 +1,11 @@
 name: Trading Brain Lagecheck
 
+# GitHub startet geplante Auftraege oft mit Verspaetung. Darum schauen wir
+# stuendlich nach - das Programm rechnet aber nur in Kilians Zeitfenstern
+# (morgens 8:30-9:30, mittags 14-15, abends 20-21 Uhr deutscher Zeit).
 on:
   schedule:
-    - cron: "55 6 * * 1-5"
-    - cron: "45 13 * * 1-5"
-    - cron: "15 20 * * 1-5"
+    - cron: "5 * * * *"
   push:
     paths:
       - "trading_brain.py"
@@ -28,7 +29,9 @@ jobs:
 
       - name: Lagecheck ausfuehren
         env:
+          TZ: Europe/Berlin
           TRADING_BRAIN_ONLINE: "1"
+          NUR_FENSTER: ${{ github.event_name == 'schedule' && '1' || '0' }}
           NTFY_KANAL: ${{ secrets.NTFY_KANAL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -38,8 +41,9 @@ jobs:
         run: |
           git config user.name "Trading Brain"
           git config user.email "actions@github.com"
-          git add dashboard.html brain_status.json
+          git add dashboard.html brain_status.json letzter_lauf.json
           git diff --staged --quiet || git commit -m "Lagecheck"
+          git pull --rebase || true
           git push
 
       - name: Seite vorbereiten
