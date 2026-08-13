@@ -38,6 +38,50 @@ JOURNAL_DATEI = os.path.join(HIER, "journal.json")
 # Dann bleiben deine Euro-Betraege aus dem Dashboard heraus (Privatsphaere).
 ONLINE = os.environ.get("TRADING_BRAIN_ONLINE") == "1"
 
+# ---- Zeitfenster fuer die Meldungen --------------------------------------
+# GitHub startet geplante Auftraege oft mit Verspaetung. Deshalb schaut die
+# Cloud stuendlich nach - rechnet aber nur in diesen Fenstern (deutsche Zeit).
+ZEITFENSTER = [
+    (8, 30, 9, 30, "morgens"),      # vor Boersenstart Frankfurt
+    (14, 0, 15, 0, "mittags"),      # um den US-Boersenstart
+    (20, 0, 21, 0, "abends"),       # vor US-Boersenschluss
+]
+LAUF_MARKE = os.path.join(HIER, "letzter_lauf.json")
+
+
+def fenster_jetzt(zeit):
+    """In welchem Meldefenster sind wir gerade? Sonst None."""
+    minuten = zeit.hour * 60 + zeit.minute
+    for h1, m1, h2, m2, name in ZEITFENSTER:
+        if h1 * 60 + m1 <= minuten <= h2 * 60 + m2:
+            return name
+    return None
+
+
+def schon_gemeldet(tag, fenster):
+    """Wurde in diesem Fenster heute schon gemeldet?"""
+    if not os.path.exists(LAUF_MARKE):
+        return False
+    try:
+        d = json.load(open(LAUF_MARKE, encoding="utf-8"))
+        return d.get(fenster) == tag
+    except Exception:
+        return False
+
+
+def merke_lauf(tag, fenster):
+    d = {}
+    if os.path.exists(LAUF_MARKE):
+        try:
+            d = json.load(open(LAUF_MARKE, encoding="utf-8"))
+        except Exception:
+            pass
+    d[fenster] = tag
+    try:
+        json.dump(d, open(LAUF_MARKE, "w", encoding="utf-8"), indent=1)
+    except Exception:
+        pass
+
 # ---- Push aufs iPhone (ntfy) -------------------------------------------
 # Dein Kanalname steht NICHT hier im Code, sondern in der privaten Datei
 # "brain_geheim.json" (bleibt auf deinem Mac) bzw. online in einem GitHub-Secret.
@@ -496,6 +540,21 @@ if os.path.exists(STATUS_DATEI):
         pass
 
 jetzt = datetime.now()
+
+# In der Cloud stuendlich nachschauen, aber nur im Zeitfenster wirklich rechnen.
+# So faengt der naechste Blick eine Verspaetung von GitHub auf.
+# Mit NUR_FENSTER=0 (oder auf dem Mac) laeuft es wie immer sofort durch.
+if os.environ.get("NUR_FENSTER") == "1":
+    _fenster = fenster_jetzt(jetzt)
+    _heute = jetzt.strftime("%Y-%m-%d")
+    if not _fenster:
+        print(f"  {jetzt:%H:%M} - ausserhalb der Meldefenster, nichts zu tun.")
+        raise SystemExit(0)
+    if schon_gemeldet(_heute, _fenster):
+        print(f"  {jetzt:%H:%M} - fuer '{_fenster}' heute bereits gemeldet.")
+        raise SystemExit(0)
+    print(f"  Meldefenster '{_fenster}' - Lagecheck wird ausgefuehrt.")
+    merke_lauf(_heute, _fenster)
 print("=" * 58)
 print("  TRADING BRAIN - Lagecheck", jetzt.strftime("%d.%m.%Y %H:%M"), "| Modus:", MODUS.upper())
 print("=" * 58)
