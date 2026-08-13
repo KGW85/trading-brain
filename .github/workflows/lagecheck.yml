@@ -41,7 +41,7 @@ jobs:
         run: |
           git config user.name "Trading Brain"
           git config user.email "actions@github.com"
-          git add dashboard.html brain_status.json letzter_lauf.json
+          git add -A dashboard.html brain_status.json letzter_lauf.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Lagecheck"
           git pull --rebase || true
           git push
