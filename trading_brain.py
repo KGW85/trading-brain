@@ -41,10 +41,13 @@ ONLINE = os.environ.get("TRADING_BRAIN_ONLINE") == "1"
 # ---- Zeitfenster fuer die Meldungen --------------------------------------
 # GitHub startet geplante Auftraege oft mit Verspaetung. Deshalb schaut die
 # Cloud stuendlich nach - rechnet aber nur in diesen Fenstern (deutsche Zeit).
+# Breite Bloecke statt enger Fenster: GitHub schaut unregelmaessig vorbei
+# (mal stuendlich, mal alle paar Stunden). Der ERSTE Lauf in jedem Block
+# rechnet - so kommt zuverlaessig dreimal am Tag eine Meldung.
 ZEITFENSTER = [
-    (8, 30, 9, 30, "morgens"),      # vor Boersenstart Frankfurt
-    (14, 0, 15, 0, "mittags"),      # um den US-Boersenstart
-    (20, 0, 21, 0, "abends"),       # vor US-Boersenschluss
+    (5, 0, 11, 59, "morgens"),      # Morgenblock - meldet frueh am Tag
+    (12, 0, 17, 59, "mittags"),     # Mittagsblock - um den US-Boersenstart
+    (18, 0, 23, 59, "abends"),      # Abendblock - nach Boersenschluss DE
 ]
 LAUF_MARKE = os.path.join(HIER, "letzter_lauf.json")
 
@@ -539,7 +542,13 @@ if os.path.exists(STATUS_DATEI):
     except Exception:
         pass
 
-jetzt = datetime.now()
+# Immer deutsche Zeit rechnen - auch wenn der Server in einer anderen
+# Zeitzone steht (GitHub laeuft in UTC).
+try:
+    from zoneinfo import ZoneInfo
+    jetzt = datetime.now(ZoneInfo("Europe/Berlin")).replace(tzinfo=None)
+except Exception:
+    jetzt = datetime.now()
 
 # In der Cloud stuendlich nachschauen, aber nur im Zeitfenster wirklich rechnen.
 # So faengt der naechste Blick eine Verspaetung von GitHub auf.
