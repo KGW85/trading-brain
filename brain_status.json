@@ -1,5 +1,5 @@
 {
-  "zeitpunkt": "2026-09-13T07:50:34.523655",
+  "zeitpunkt": "2026-09-13T13:29:13.578528",
   "modus": "offensiv",
   "maerkte": [
     {
@@ -34,22 +34,22 @@
     },
     {
       "markt": "Bitcoin",
-      "kurs": 66701.78,
-      "linie": 60484.68,
+      "kurs": 66101.9,
+      "linie": 60527.06,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 10.3,
-      "momentum": -13.7,
+      "abstand": 9.2,
+      "momentum": -15.4,
       "gehalten": false
     },
     {
       "markt": "Ethereum",
-      "kurs": 2177.24,
-      "linie": 1773.59,
+      "kurs": 2134.41,
+      "linie": 1775.56,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 22.8,
-      "momentum": -18.3,
+      "abstand": 20.2,
+      "momentum": -20.5,
       "gehalten": false
     }
   ]
