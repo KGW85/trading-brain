@@ -1,55 +1,55 @@
 {
-  "zeitpunkt": "2026-09-14T06:21:05.236542",
+  "zeitpunkt": "2026-09-14T12:28:19.362429",
   "modus": "offensiv",
   "maerkte": [
     {
       "markt": "S&P Tech",
-      "kurs": 44.74,
-      "linie": 38.91,
+      "kurs": 43.83,
+      "linie": 38.95,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 15.0,
-      "momentum": 32.7,
+      "abstand": 12.5,
+      "momentum": 29.8,
       "gehalten": true
     },
     {
       "markt": "Gold",
-      "kurs": 4370.4,
-      "linie": 4528.2,
+      "kurs": 4328.5,
+      "linie": 4527.99,
       "status": "CASH",
       "ueber": false,
-      "abstand": -3.5,
-      "momentum": 20.2,
+      "abstand": -4.4,
+      "momentum": 19.0,
       "gehalten": false
     },
     {
       "markt": "DAX",
-      "kurs": 25568.56,
-      "linie": 24727.64,
+      "kurs": 25441.26,
+      "linie": 24736.22,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 3.4,
-      "momentum": 7.9,
+      "abstand": 2.9,
+      "momentum": 7.1,
       "gehalten": true
     },
     {
       "markt": "Bitcoin",
-      "kurs": 67057.03,
-      "linie": 60531.83,
+      "kurs": 67522.43,
+      "linie": 60579.8,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 10.8,
-      "momentum": -14.1,
+      "abstand": 11.5,
+      "momentum": -15.7,
       "gehalten": false
     },
     {
       "markt": "Ethereum",
-      "kurs": 2172.31,
-      "linie": 1775.75,
+      "kurs": 2180.17,
+      "linie": 1777.89,
       "status": "INVESTIERT",
       "ueber": true,
-      "abstand": 22.3,
-      "momentum": -19.0,
+      "abstand": 22.6,
+      "momentum": -20.8,
       "gehalten": false
     }
   ]
